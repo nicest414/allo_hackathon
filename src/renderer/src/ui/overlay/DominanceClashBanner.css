@@ -1,0 +1,231 @@
+.clash-banner {
+  position: relative;
+  width: 100%;
+  height: 132px;
+  display: flex;
+  font-family: 'Segoe UI', sans-serif;
+  /* 演出は視覚的なオーバーレイであり、ビーム等が下のUIのクリックを奪わないようにする */
+  pointer-events: none;
+}
+
+.clash-banner__zone {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  transition: width 0.35s ease-out;
+}
+
+.clash-banner__zone--left {
+  background: linear-gradient(90deg, #03182b 0%, #0b3a63 55%, #115e93 100%);
+}
+
+.clash-banner__zone--right {
+  background: linear-gradient(270deg, #2b0320 0%, #6b1158 55%, #93115e 100%);
+}
+
+.clash-banner__bolts {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.clash-banner__zone--left .clash-banner__bolts path {
+  stroke: #7be8ff;
+  filter: drop-shadow(0 0 4px #36c7ff) drop-shadow(0 0 10px #36c7ff);
+  animation: bolt-flicker 1.6s infinite ease-in-out;
+}
+
+.clash-banner__zone--right .clash-banner__bolts path {
+  stroke: #ff8df0;
+  filter: drop-shadow(0 0 4px #ff3df1) drop-shadow(0 0 10px #ff3df1);
+  animation: bolt-flicker 1.6s infinite ease-in-out;
+}
+
+.clash-banner__bolts path:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.clash-banner__bolts path:nth-child(2) {
+  animation-delay: 0.35s;
+}
+
+.clash-banner__bolts path:nth-child(3) {
+  animation-delay: 0.7s;
+}
+
+@keyframes bolt-flicker {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  10% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 0.4;
+  }
+  45% {
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  80% {
+    opacity: 0.8;
+  }
+}
+
+.clash-banner__sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.clash-banner__zone--left .clash-banner__sweep {
+  background: linear-gradient(90deg, transparent, rgba(125, 232, 255, 0.35), transparent);
+  animation: sweep-right 2.4s linear infinite;
+}
+
+.clash-banner__zone--right .clash-banner__sweep {
+  background: linear-gradient(270deg, transparent, rgba(255, 141, 240, 0.35), transparent);
+  animation: sweep-left 2.4s linear infinite;
+}
+
+@keyframes sweep-right {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sweep-left {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.clash-banner__portrait {
+  position: absolute;
+  bottom: 0;
+  height: 100%;
+  width: auto;
+  z-index: 2;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+  transition: left 0.35s ease-out, right 0.35s ease-out;
+}
+
+.clash-banner__portrait--left {
+  object-position: right bottom;
+}
+
+.clash-banner__portrait--right {
+  object-position: left bottom;
+}
+
+.clash-banner__clash {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 0;
+  z-index: 3;
+  transition: left 0.35s ease-out;
+}
+
+.clash-banner__flash,
+.clash-banner__beam,
+.clash-banner__value {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.clash-banner__flash {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.35) 28%,
+    transparent 70%
+  );
+  animation: flash-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes flash-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
+  }
+}
+
+.clash-banner__beam {
+  width: 10px;
+  height: 220%;
+  background: linear-gradient(180deg, transparent, #ffffff 45%, #ffffff 55%, transparent);
+  box-shadow: 0 0 18px 4px rgba(255, 255, 255, 0.9);
+  animation: beam-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes beam-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scaleY(0.92);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(-50%, -50%) scaleY(1.05);
+    opacity: 1;
+  }
+}
+
+.clash-banner__value {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1025;
+  background: radial-gradient(circle, #ffffff 0%, #ffe9fb 60%, #ffd1f6 100%);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.85);
+}
+
+.clash-banner__label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.clash-banner__label--left {
+  left: 14px;
+  color: #9fe9ff;
+}
+
+.clash-banner__label--right {
+  right: 14px;
+  color: #ffb3f1;
+}

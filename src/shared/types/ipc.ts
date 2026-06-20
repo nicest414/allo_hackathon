@@ -7,7 +7,8 @@ export const IPC_CHANNELS = {
   sttAudioChunk: 'stt:audio-chunk',
   sttTranscript: 'stt:transcript',
   llmJudgeResponse: 'llm:judge-response',
-  captureDesktopSources: 'capture:desktop-sources'
+  captureDesktopSources: 'capture:desktop-sources',
+  overlaySetClickThrough: 'overlay:set-click-through'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -31,6 +32,10 @@ export type CaptureDesktopSourcesRequest = DesktopCaptureSourcesRequest
 
 export type CaptureDesktopSourcesResult = DesktopCaptureSource[]
 
+export interface OverlaySetClickThroughRequest {
+  enabled: boolean
+}
+
 export interface AlloPreloadApi {
   stt: {
     start: (request: SttStartRequest) => Promise<void>
@@ -45,5 +50,8 @@ export interface AlloPreloadApi {
     listDesktopSources: (
       request?: CaptureDesktopSourcesRequest
     ) => Promise<CaptureDesktopSourcesResult>
+  }
+  overlay: {
+    setClickThrough: (request: OverlaySetClickThroughRequest) => Promise<void>
   }
 }

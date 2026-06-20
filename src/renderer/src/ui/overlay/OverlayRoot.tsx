@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { useDominanceStore } from '../../store/useDominanceStore'
-import { DominanceGauge } from './DominanceGauge'
+import { DominanceClashBanner } from './DominanceClashBanner'
 
 export function OverlayRoot(): ReactElement {
   const dominance = useDominanceStore((state) => state.dominance)
@@ -10,25 +10,38 @@ export function OverlayRoot(): ReactElement {
 
   return (
     <div style={styles.root}>
-      <DominanceGauge value={dominance} />
-      <div style={styles.controls}>
-        <button onClick={() => setDominance(dominance - 10)}>劣勢 -10</button>
-        <button onClick={() => setDominance(dominance + 10)}>優勢 +10</button>
-        <button onClick={reset}>リセット</button>
+      <DominanceClashBanner value={dominance} />
+      <div style={styles.content}>
+        <div
+          style={styles.controls}
+          onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
+          onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
+        >
+          <button onClick={() => setDominance(dominance - 10)}>劣勢 -10</button>
+          <button onClick={() => setDominance(dominance + 10)}>優勢 +10</button>
+          <button onClick={reset}>リセット</button>
+        </div>
+        <ul style={styles.scores}>
+          {Object.entries(scores).map(([key, value]) => (
+            <li key={key}>
+              {key}: {value}
+            </li>
+          ))}
+        </ul>
       </div>
-      <ul style={styles.scores}>
-        {Object.entries(scores).map(([key, value]) => (
-          <li key={key}>
-            {key}: {value}
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }
 
 const styles: Record<string, CSSProperties> = {
   root: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    alignItems: 'stretch',
+    gap: '12px'
+  },
+  content: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
