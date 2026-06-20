@@ -1,10 +1,12 @@
 import { app, BrowserWindow } from 'electron'
+import { registerSttIpc } from './ipc/sttIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
 let overlayWindow: BrowserWindow | null = null
 
 app.whenReady().then(() => {
   overlayWindow = createOverlayWindow()
+  registerSttIpc(() => overlayWindow)
 
   app.on('activate', () => {
     // macOS: Dockアイコンクリック時にウィンドウが無ければ再生成する
