@@ -43,6 +43,32 @@ export async function getInterviewerScreenStream(
   }
 }
 
+export async function getInterviewerLoopbackAudioStream(): Promise<CaptureResult<MediaStream>> {
+  try {
+    await window.allo.capture.enableLoopbackAudio()
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      video: true
+    })
+
+    stream.getVideoTracks().forEach((track) => {
+      track.stop()
+      stream.removeTrack(track)
+    })
+
+    if (stream.getAudioTracks().length === 0) {
+      stream.getTracks().forEach((track) => track.stop())
+      throw new Error('面接官の出力音声トラックを取得できませんでした')
+    }
+
+    return { ok: true, stream }
+  } catch (error) {
+    return { ok: false, error: toCaptureErrorInfo(error) }
+  } finally {
+    await window.allo.capture.disableLoopbackAudio().catch(() => undefined)
+  }
+}
+
 function toDesktopVideoConstraints(
   options: InterviewerScreenOptions
 ): ElectronDesktopVideoConstraints {
