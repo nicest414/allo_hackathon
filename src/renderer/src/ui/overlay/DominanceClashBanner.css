@@ -8,6 +8,32 @@
   pointer-events: none;
   /* 雷と集中線のパルス周期はこの変数で一括管理し、2つの演出が別々の周期で動いて見えないようにする */
   --clash-pulse-duration: 1.6s;
+  /*
+   * 境界線・ゾーン幅・両陣営の立ち絵を1つの変数で同期してにじり動かす。
+   * 数値(スコア)自体は変えず、見た目の境界位置だけを±3%ほど往復させる。
+   * --left-width/--right-width はReact側から渡される実際の優勢度。
+   */
+  --clash-jitter: 0%;
+  animation: clash-boundary-sway 0.7s ease-in-out infinite;
+}
+
+@property --clash-jitter {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+@keyframes clash-boundary-sway {
+  0%,
+  100% {
+    --clash-jitter: 0%;
+  }
+  25% {
+    --clash-jitter: -3%;
+  }
+  75% {
+    --clash-jitter: 3%;
+  }
 }
 
 .clash-banner__zone {
@@ -18,10 +44,12 @@
 }
 
 .clash-banner__zone--left {
+  width: calc(var(--left-width) + var(--clash-jitter));
   background: linear-gradient(90deg, #03182b 0%, #0b3a63 55%, #115e93 100%);
 }
 
 .clash-banner__zone--right {
+  width: calc(var(--right-width) - var(--clash-jitter));
   background: linear-gradient(270deg, #2b0320 0%, #6b1158 55%, #93115e 100%);
 }
 
@@ -150,10 +178,12 @@
 }
 
 .clash-banner__portrait--left {
+  right: calc(var(--right-width) - var(--clash-jitter));
   object-position: right bottom;
 }
 
 .clash-banner__portrait--right {
+  left: calc(var(--left-width) + var(--clash-jitter));
   object-position: left bottom;
 }
 
@@ -163,6 +193,7 @@
   height: 100%;
   width: 0;
   z-index: 3;
+  left: calc(var(--left-width) + var(--clash-jitter));
   transition: left 0.35s ease-out;
 }
 

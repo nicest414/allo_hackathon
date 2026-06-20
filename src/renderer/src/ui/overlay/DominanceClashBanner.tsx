@@ -1,10 +1,15 @@
-import type { ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import './DominanceClashBanner.css'
 import leftPortrait from '../../assets/portrait/left.png'
 import rightPortrait from '../../assets/portrait/right.png'
 
 interface DominanceClashBannerProps {
   value: number
+}
+
+interface ClashBannerStyle extends CSSProperties {
+  '--left-width': string
+  '--right-width': string
 }
 
 const LEFT_BOLTS = [
@@ -37,15 +42,21 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
   const clamped = Math.min(100, Math.max(0, Math.round(value)))
   const leftWidth = 100 - clamped
   const rightWidth = clamped
+  // 境界線の位置は --left-width/--right-width で渡し、実際の表示位置は
+  // CSS側で僅かなにじり(--clash-jitter)を加えて計算する。数値表示(clamped)はにじりの影響を受けない。
+  const boundaryVars: ClashBannerStyle = {
+    '--left-width': `${leftWidth}%`,
+    '--right-width': `${rightWidth}%`
+  }
 
   return (
-    <div className="clash-banner" role="img" aria-label={`優勢度 ${clamped}`}>
-      <div className="clash-banner__zone clash-banner__zone--left" style={{ width: `${leftWidth}%` }}>
+    <div className="clash-banner" role="img" aria-label={`優勢度 ${clamped}`} style={boundaryVars}>
+      <div className="clash-banner__zone clash-banner__zone--left">
         <div className="clash-banner__rays" aria-hidden="true" />
         <BoltGroup paths={LEFT_BOLTS} />
         <div className="clash-banner__sweep" />
       </div>
-      <div className="clash-banner__zone clash-banner__zone--right" style={{ width: `${rightWidth}%` }}>
+      <div className="clash-banner__zone clash-banner__zone--right">
         <div className="clash-banner__rays" aria-hidden="true" />
         <BoltGroup paths={RIGHT_BOLTS} />
         <div className="clash-banner__sweep" />
@@ -55,16 +66,14 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
         src={leftPortrait}
         alt=""
         aria-hidden="true"
-        style={{ right: `${rightWidth}%` }}
       />
       <img
         className="clash-banner__portrait clash-banner__portrait--right"
         src={rightPortrait}
         alt=""
         aria-hidden="true"
-        style={{ left: `${leftWidth}%` }}
       />
-      <div className="clash-banner__clash" style={{ left: `${leftWidth}%` }}>
+      <div className="clash-banner__clash">
         <div className="clash-banner__flash" />
         <div className="clash-banner__beam" />
         <div className="clash-banner__value">{clamped}</div>
