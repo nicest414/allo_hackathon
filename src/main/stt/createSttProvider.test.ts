@@ -14,9 +14,9 @@ describe('createSttProvider', () => {
 
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    delete process.env.STT_PROVIDER
-    delete process.env.DEEPGRAM_API_KEY
-    delete process.env.STT_FAKE
+    process.env.STT_PROVIDER = ''
+    process.env.DEEPGRAM_API_KEY = ''
+    process.env.STT_FAKE = ''
     resetMainEnvForTest()
   })
 

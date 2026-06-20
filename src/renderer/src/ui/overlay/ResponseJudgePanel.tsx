@@ -1,15 +1,31 @@
-import { useState, type CSSProperties, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import { useResponseJudge } from '../../hooks/useResponseJudge'
+
+export interface ResponseJudgePanelProps {
+  questionDraft?: string
+}
 
 /**
  * 返答内容判定の最小導線UI。
- * STTの話者分離が未実装のため、まずは質問/返答を手入力してLLM判定を呼べるようにする。
+ * 面接官STTで自動取得した質問を初期入力し、必要なら手で補正してLLM判定を呼べるようにする。
  * 判定結果(responseスコア・理由)を表示し、Storeのresponseスコアにも反映される。
  */
-export function ResponseJudgePanel(): ReactElement {
+export function ResponseJudgePanel({ questionDraft = '' }: ResponseJudgePanelProps): ReactElement {
   const { judge, judging, score, reason } = useResponseJudge()
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const lastAppliedQuestionDraftRef = useRef('')
+
+  useEffect(() => {
+    const canApplyDraft =
+      questionDraft.trim() !== '' &&
+      (question.trim() === '' || question === lastAppliedQuestionDraftRef.current)
+
+    if (canApplyDraft) {
+      setQuestion(questionDraft)
+      lastAppliedQuestionDraftRef.current = questionDraft
+    }
+  }, [question, questionDraft])
 
   const canJudge = !judging && question.trim() !== '' && answer.trim() !== ''
 
