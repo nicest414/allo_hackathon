@@ -13,6 +13,8 @@ export interface MainEnv {
   llmDebug: boolean
   /** STT_FAKE 有効時：実STT APIを呼ばずダミーtranscriptを流す（キー無し/オフライン/CI用） */
   sttFake: boolean
+  /** STT_DEBUG 有効時：STTの生transcript(interim/final)をstderrに出す（キーは出さない） */
+  sttDebug: boolean
 }
 
 const ENV_FILE_NAME = '.env'
@@ -31,7 +33,8 @@ export function getMainEnv(): MainEnv {
       sttProvider: readSttProvider(),
       llmFake: readBooleanEnv('LLM_FAKE'),
       llmDebug: readBooleanEnv('LLM_DEBUG'),
-      sttFake: readBooleanEnv('STT_FAKE')
+      sttFake: readBooleanEnv('STT_FAKE'),
+      sttDebug: readBooleanEnv('STT_DEBUG')
     }
   }
 
@@ -93,6 +96,10 @@ export function isLlmDebug(): boolean {
 
 export function isSttFake(): boolean {
   return getMainEnv().sttFake
+}
+
+export function isSttDebug(): boolean {
+  return getMainEnv().sttDebug
 }
 
 export function resetMainEnvForTest(): void {
@@ -166,7 +173,7 @@ function readOptionalEnv(key: 'GEMINI_API_KEY' | 'DEEPGRAM_API_KEY'): string | u
 }
 
 /** "1" / "true" / "yes" / "on"（大文字小文字無視）を真とみなす。未設定・空は偽。 */
-function readBooleanEnv(key: 'LLM_FAKE' | 'LLM_DEBUG' | 'STT_FAKE'): boolean {
+function readBooleanEnv(key: 'LLM_FAKE' | 'LLM_DEBUG' | 'STT_FAKE' | 'STT_DEBUG'): boolean {
   const value = process.env[key]?.trim().toLowerCase()
   return value === '1' || value === 'true' || value === 'yes' || value === 'on'
 }

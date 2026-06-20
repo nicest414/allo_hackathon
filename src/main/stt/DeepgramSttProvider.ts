@@ -1,5 +1,6 @@
 import type { TranscriptSegment } from '../../shared/types/analysis'
 import type { SttStartRequest } from '../../shared/types/ipc'
+import { isSttDebug } from '../env'
 import type { SttProvider, SttTranscriptListener } from './SttProvider'
 
 const DEEPGRAM_WS_BASE = 'wss://api.deepgram.com/v1/listen'
@@ -10,8 +11,8 @@ const KEEPALIVE_INTERVAL_MS = 8_000
  * Deepgram streaming STTの実装。Node 22のglobal WebSocketで接続する（依存追加なし）。
  * 認証はDeepgramのサブプロトコル方式（['token', apiKey]）を使う。
  *
- * punctuate=false / smart_format=false にして「えっと」等のフィラーを整形させず、
- * 生に近い文字起こしを得る（フィラー検出の入力源にするため）。
+ * punctuate=false / smart_format=false に加え filler_words=true で「えっと」等の
+ * フィラーを整形・除去させず、生に近い文字起こしを得る（フィラー検出の入力源にするため）。
  * 接続確立前に届いた音声chunkはキューに退避し、open後にまとめて送る。
  */
 export class DeepgramSttProvider implements SttProvider {
@@ -32,7 +33,9 @@ export class DeepgramSttProvider implements SttProvider {
       channels: '1',
       interim_results: 'true',
       punctuate: 'false',
-      smart_format: 'false'
+      smart_format: 'false',
+      // Deepgramは既定でフィラー(uh/um/えっと等)を除去するため、明示的に保持する。
+      filler_words: 'true'
     })
 
     const ws = new WebSocket(`${DEEPGRAM_WS_BASE}?${params.toString()}`, ['token', this.apiKey])
@@ -140,10 +143,17 @@ export class DeepgramSttProvider implements SttProvider {
       return
     }
 
+    const isFinal = Boolean(message.is_final)
+
+    // STT_DEBUG時のみ生transcriptをstderrへ。フィラーが実際にどう返るかの確認用（キーは出さない）。
+    if (isSttDebug()) {
+      console.error(`[stt:debug] (${isFinal ? 'final' : 'interim'}) "${text}"`)
+    }
+
     const segment: TranscriptSegment = {
       timestamp: Date.now(),
       text,
-      isFinal: Boolean(message.is_final)
+      isFinal
     }
 
     for (const listener of this.listeners) {

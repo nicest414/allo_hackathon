@@ -81,6 +81,7 @@ describe('DeepgramSttProvider', () => {
     expect(ws.url).toContain('sample_rate=48000')
     expect(ws.url).toContain('punctuate=false')
     expect(ws.url).toContain('smart_format=false')
+    expect(ws.url).toContain('filler_words=true')
     expect(ws.protocols).toEqual(['token', 'test-key'])
   })
 
