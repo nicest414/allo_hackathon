@@ -71,24 +71,34 @@ export function toFaceAnalysisResult(
   }
 }
 
+// 口角の引き上げ量を、目の間隔（顔の大きさ・カメラ距離に依存しないスケール基準）で正規化した値。
+// 経験的な係数のため、実機で笑顔/無表情を見て調整する前提（暫定値）。
+const SMILE_LIFT_SCALE = 350
+
 function estimateSmileLevel(landmarks: FaceLandmarkerResult['landmarks']): number {
   const leftMouth = landmarks[61]
   const rightMouth = landmarks[291]
   const upperLip = landmarks[13]
   const lowerLip = landmarks[14]
+  const leftEye = landmarks[33]
+  const rightEye = landmarks[263]
 
-  if (!leftMouth || !rightMouth || !upperLip || !lowerLip) {
+  if (!leftMouth || !rightMouth || !upperLip || !lowerLip || !leftEye || !rightEye) {
     return 0
   }
 
-  const mouthWidth = distance(leftMouth, rightMouth)
-  const mouthOpen = distance(upperLip, lowerLip)
-
-  if (mouthWidth === 0) {
+  const faceScale = distance(leftEye, rightEye)
+  if (faceScale === 0) {
     return 0
   }
 
-  return clamp((mouthWidth / Math.max(mouthOpen, 0.01) - 2) * 25)
+  // 口角(61,291)が口の中心(13,14の中点)よりどれだけ上にあるか。
+  // 画像座標はy値が下方向に増えるため、口角が持ち上がる(=笑顔)とこの差が正になる。
+  const mouthCenterY = (upperLip.y + lowerLip.y) / 2
+  const cornerY = (leftMouth.y + rightMouth.y) / 2
+  const cornerLift = (mouthCenterY - cornerY) / faceScale
+
+  return clamp(cornerLift * SMILE_LIFT_SCALE)
 }
 
 function estimateTensionLevel(

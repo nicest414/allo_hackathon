@@ -26,6 +26,9 @@ void enableLoopbackAudio().then((result) => {
 app.whenReady().then(() => {
   registerLlmIpc()
   overlayWindow = createOverlayWindow()
+  overlayWindow.webContents.on('console-message', (_event, _level, message) => {
+    console.log(`[renderer] ${message}`)
+  })
   registerCaptureIpc()
   registerSttIpc(() => overlayWindow)
   registerWindowIpc(() => overlayWindow)

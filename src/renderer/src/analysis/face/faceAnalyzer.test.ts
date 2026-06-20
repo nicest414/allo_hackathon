@@ -67,6 +67,18 @@ describe('face analyzers', () => {
     expect(result.smileLevel).toBeGreaterThan(60)
   })
 
+  it('does not classify a closed, neutral mouth as a smile', async () => {
+    const analyzer = createCandidateFaceAnalyzer({
+      landmarker: createStubFaceLandmarker(neutralLandmarks()),
+      now: () => 456
+    })
+
+    const result = await analyzer.analyze({} as ImageData)
+
+    expect(result.expression).not.toBe('smile')
+    expect(result.smileLevel).toBeLessThan(30)
+  })
+
   it('preserves interviewer subject for screen-frame analysis', async () => {
     const analyzer = createInterviewerFaceAnalyzer({
       landmarker: createStubFaceLandmarker(smilingLandmarks()),
@@ -202,13 +214,29 @@ describe('MediaPipe face landmarker wrapper', () => {
 
 function smilingLandmarks(): NormalizedFaceLandmark[] {
   const landmarks = Array.from({ length: 301 }, () => ({ x: 0, y: 0 }))
-  landmarks[13] = { x: 0.5, y: 0.48 }
+  landmarks[13] = { x: 0.5, y: 0.5 }
   landmarks[14] = { x: 0.5, y: 0.52 }
   landmarks[33] = { x: 0.3, y: 0.35 }
-  landmarks[61] = { x: 0.35, y: 0.5 }
+  // 口角(61,291)を口の中心より上(yが小さい)に大きく引き上げ、笑顔の「口角が上がる」特徴を表現する
+  landmarks[61] = { x: 0.35, y: 0.43 }
   landmarks[70] = { x: 0.3, y: 0.25 }
   landmarks[263] = { x: 0.7, y: 0.35 }
-  landmarks[291] = { x: 0.65, y: 0.5 }
+  landmarks[291] = { x: 0.65, y: 0.43 }
+  landmarks[300] = { x: 0.7, y: 0.25 }
+
+  return landmarks
+}
+
+function neutralLandmarks(): NormalizedFaceLandmark[] {
+  const landmarks = Array.from({ length: 301 }, () => ({ x: 0, y: 0 }))
+  landmarks[13] = { x: 0.5, y: 0.5 }
+  landmarks[14] = { x: 0.5, y: 0.515 }
+  landmarks[33] = { x: 0.3, y: 0.35 }
+  // 口角(61,291)を口の中心とほぼ同じ高さに置く(=口を閉じた無表情)
+  landmarks[61] = { x: 0.35, y: 0.505 }
+  landmarks[70] = { x: 0.3, y: 0.25 }
+  landmarks[263] = { x: 0.7, y: 0.35 }
+  landmarks[291] = { x: 0.65, y: 0.505 }
   landmarks[300] = { x: 0.7, y: 0.25 }
 
   return landmarks

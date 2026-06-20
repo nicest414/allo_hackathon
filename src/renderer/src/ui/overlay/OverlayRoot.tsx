@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
-import type { TranscriptSegment } from '../../../../shared/types/analysis'
+import type { FaceAnalysisResult, TranscriptSegment } from '../../../../shared/types/analysis'
 import {
   getScreenAccessStatus,
   listInterviewerScreenSources,
@@ -69,6 +69,19 @@ export function OverlayRoot(): ReactElement {
   const [fillerSummary, setFillerSummary] = useState('')
   const [voiceLoopState, setVoiceLoopState] = useState(voiceAnalysisLoop.getState())
   const [voiceLoopMessage, setVoiceLoopMessage] = useState('')
+  // 表情スコアロジックの動作確認用（一時的なデバッグ表示）。スコア合成前の生値を見える化する。
+  const [candidateFaceDebug, setCandidateFaceDebug] = useState<FaceAnalysisResult | null>(null)
+  const [interviewerFaceDebug, setInterviewerFaceDebug] = useState<FaceAnalysisResult | null>(null)
+
+  useEffect(() => {
+    return faceAnalysisLoop.onAnalysisResult((subject, result) => {
+      if (subject === 'candidate') {
+        setCandidateFaceDebug(result)
+      } else {
+        setInterviewerFaceDebug(result)
+      }
+    })
+  }, [])
 
   // 直近 windowMs 内のfinal transcriptだけでフィラーを再評価し、Storeへ反映する。
   // 黙る/きれいに話すと古いフィラーが窓から抜けてスコアが下がる（=ゲージが揺れ動く）。
@@ -394,6 +407,18 @@ export function OverlayRoot(): ReactElement {
             </li>
           ))}
         </ul>
+        {candidateFaceDebug ? (
+          <div style={styles.faceLoopMessage}>
+            顔(自分) 生値: smile={candidateFaceDebug.smileLevel} tension=
+            {candidateFaceDebug.tensionLevel} expression={candidateFaceDebug.expression}
+          </div>
+        ) : null}
+        {interviewerFaceDebug ? (
+          <div style={styles.faceLoopMessage}>
+            顔(相手) 生値: smile={interviewerFaceDebug.smileLevel} tension=
+            {interviewerFaceDebug.tensionLevel} expression={interviewerFaceDebug.expression}
+          </div>
+        ) : null}
         <ResponseJudgePanel questionDraft={latestInterviewerQuestion} />
       </div>
     </div>
