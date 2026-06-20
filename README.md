@@ -9,6 +9,17 @@
 - 就活生・面接官それぞれの状態（表情・声・発言内容）から優勢度を算出する
 - 優勢度が振り切れた時にカットイン演出を入れる
 
+## 開発環境セットアップ
+
+```bash
+npm install
+cp .env.example .env   # 各自のAPIキーを記入（.env は .gitignore 済み）
+npm run dev
+```
+
+APIキー（`GEMINI_API_KEY` / `DEEPGRAM_API_KEY`）の取得手順・無料枠・`STT_PROVIDER` ごとの
+必須キー・安全な共有方法は **[docs/development-setup.md](docs/development-setup.md)** を参照。
+
 ## 入力
 
 | 項目 | 取得元 | 対象 |
