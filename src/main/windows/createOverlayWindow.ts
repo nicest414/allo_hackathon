@@ -1,8 +1,9 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BrowserWindow, screen } from 'electron'
+import electron from 'electron'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const { BrowserWindow, screen } = electron
 
 /**
  * Web会議画面の上に重ねる透明オーバーレイWindowを生成する。
@@ -14,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  *
  * 開発時はVite dev server、本番時はビルド済みHTMLを読み込む。
  */
-export function createOverlayWindow(): BrowserWindow {
+export function createOverlayWindow(): Electron.BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
 
@@ -37,7 +38,7 @@ export function createOverlayWindow(): BrowserWindow {
     backgroundColor: '#00000000',
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -65,12 +66,12 @@ export function createOverlayWindow(): BrowserWindow {
  * クリック透過のON/OFFを切り替える。
  * @param enabled true: マウスイベントを下のアプリへ素通し / false: オーバーレイ自身が受け取る
  */
-export function setClickThrough(window: BrowserWindow, enabled: boolean): void {
+export function setClickThrough(window: Electron.BrowserWindow, enabled: boolean): void {
   // forward: true で透過中もmousemove等のイベントはrendererに届く（hover演出用）
   window.setIgnoreMouseEvents(enabled, { forward: true })
 }
 
-function loadOverlayContent(window: BrowserWindow): void {
+function loadOverlayContent(window: Electron.BrowserWindow): void {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
     window.loadURL(devServerUrl)

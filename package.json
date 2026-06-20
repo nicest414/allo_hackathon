@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "description": "就活面接 優劣判定オーバーレイ",
   "private": true,
-  "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

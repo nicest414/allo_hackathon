@@ -1,9 +1,11 @@
-import { desktopCapturer } from 'electron'
+import electron from 'electron'
 import type { SourcesOptions } from 'electron'
 import type {
   DesktopCaptureSource,
   DesktopCaptureSourcesRequest
 } from '../../shared/types/capture'
+
+const { desktopCapturer } = electron
 
 const DEFAULT_THUMBNAIL_SIZE = { width: 320, height: 180 } as const
 
