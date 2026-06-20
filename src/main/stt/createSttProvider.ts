@@ -1,7 +1,6 @@
 import { getDeepgramApiKey, getSttProvider, isSttFake } from '../env'
 import { DeepgramSttProvider } from './DeepgramSttProvider'
 import { DummySttProvider } from './DummySttProvider'
-import { GeminiLiveSttProvider } from './GeminiLiveSttProvider'
 import type { SttProvider } from './SttProvider'
 
 /**
@@ -28,8 +27,5 @@ export function createSttProvider(): SttProvider {
       console.info('[stt] mode: LIVE（Deepgram streaming）')
       return new DeepgramSttProvider(apiKey)
     }
-    case 'gemini_live':
-      // Gemini Live STT は未実装（ダミー据え置き・別issue）
-      return new GeminiLiveSttProvider()
   }
 }

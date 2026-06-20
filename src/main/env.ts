@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-export type SttProviderName = 'deepgram' | 'gemini_live'
+export type SttProviderName = 'deepgram'
 
 export interface MainEnv {
   geminiApiKey?: string
@@ -17,7 +17,7 @@ export interface MainEnv {
 
 const ENV_FILE_NAME = '.env'
 const DEFAULT_STT_PROVIDER: SttProviderName = 'deepgram'
-const STT_PROVIDERS = new Set<SttProviderName>(['deepgram', 'gemini_live'])
+const STT_PROVIDERS = new Set<SttProviderName>(['deepgram'])
 
 let cachedEnv: MainEnv | undefined
 
