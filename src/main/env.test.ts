@@ -6,6 +6,8 @@ import {
   getDeepgramApiKey,
   getGeminiApiKey,
   getSttProvider,
+  requireDeepgramApiKey,
+  requireGeminiApiKey,
   resetMainEnvForTest
 } from './env'
 
@@ -82,5 +84,21 @@ describe('main env', () => {
     writeFileSync(join(tempDir, '.env'), 'STT_PROVIDER=unknown\n')
 
     expect(() => getSttProvider()).toThrow('Invalid STT_PROVIDER "unknown"')
+  })
+
+  it('returns required API keys when set', () => {
+    writeFileSync(
+      join(tempDir, '.env'),
+      'GEMINI_API_KEY=gemini-secret\nDEEPGRAM_API_KEY=deepgram-secret\n'
+    )
+
+    expect(requireGeminiApiKey()).toBe('gemini-secret')
+    expect(requireDeepgramApiKey()).toBe('deepgram-secret')
+  })
+
+  it('throws an actionable error when a required API key is missing', () => {
+    expect(() => requireGeminiApiKey()).toThrow('GEMINI_API_KEY が未設定です')
+    expect(() => requireGeminiApiKey()).toThrow('docs/development-setup.md')
+    expect(() => requireDeepgramApiKey()).toThrow('DEEPGRAM_API_KEY が未設定です')
   })
 })

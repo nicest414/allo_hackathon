@@ -7,6 +7,12 @@ export interface MainEnv {
   geminiApiKey?: string
   deepgramApiKey?: string
   sttProvider: SttProviderName
+  /** LLM_FAKE 有効時：実APIを呼ばず決定的なモック判定を返す（キー無し/オフライン/CI用） */
+  llmFake: boolean
+  /** LLM_DEBUG 有効時：Gemini呼び出しの詳細をstderrに出す（キーは出さない） */
+  llmDebug: boolean
+  /** STT_FAKE 有効時：実STT APIを呼ばずダミーtranscriptを流す（キー無し/オフライン/CI用） */
+  sttFake: boolean
 }
 
 const ENV_FILE_NAME = '.env'
@@ -22,7 +28,10 @@ export function getMainEnv(): MainEnv {
     cachedEnv = {
       geminiApiKey: readOptionalEnv('GEMINI_API_KEY'),
       deepgramApiKey: readOptionalEnv('DEEPGRAM_API_KEY'),
-      sttProvider: readSttProvider()
+      sttProvider: readSttProvider(),
+      llmFake: readBooleanEnv('LLM_FAKE'),
+      llmDebug: readBooleanEnv('LLM_DEBUG'),
+      sttFake: readBooleanEnv('STT_FAKE')
     }
   }
 
@@ -37,8 +46,53 @@ export function getDeepgramApiKey(): string | undefined {
   return getMainEnv().deepgramApiKey
 }
 
+const SETUP_DOC_HINT = '取得手順: docs/development-setup.md'
+
+/**
+ * GEMINI_API_KEY を必須として取得する。未設定なら取得手順つきのエラーを投げる。
+ * キーが無くてもスタブで動かしたい処理は getGeminiApiKey() を使うこと。
+ */
+export function requireGeminiApiKey(): string {
+  const key = getGeminiApiKey()
+
+  if (!key) {
+    throw new Error(
+      `GEMINI_API_KEY が未設定です。.env に GEMINI_API_KEY を設定してください。${SETUP_DOC_HINT}`
+    )
+  }
+
+  return key
+}
+
+/**
+ * DEEPGRAM_API_KEY を必須として取得する。未設定なら取得手順つきのエラーを投げる。
+ */
+export function requireDeepgramApiKey(): string {
+  const key = getDeepgramApiKey()
+
+  if (!key) {
+    throw new Error(
+      `DEEPGRAM_API_KEY が未設定です。.env に DEEPGRAM_API_KEY を設定してください。${SETUP_DOC_HINT}`
+    )
+  }
+
+  return key
+}
+
 export function getSttProvider(): SttProviderName {
   return getMainEnv().sttProvider
+}
+
+export function isLlmFake(): boolean {
+  return getMainEnv().llmFake
+}
+
+export function isLlmDebug(): boolean {
+  return getMainEnv().llmDebug
+}
+
+export function isSttFake(): boolean {
+  return getMainEnv().sttFake
 }
 
 export function resetMainEnvForTest(): void {
@@ -109,6 +163,12 @@ function unquoteDotEnvValue(value: string): string {
 function readOptionalEnv(key: 'GEMINI_API_KEY' | 'DEEPGRAM_API_KEY'): string | undefined {
   const value = process.env[key]?.trim()
   return value ? value : undefined
+}
+
+/** "1" / "true" / "yes" / "on"（大文字小文字無視）を真とみなす。未設定・空は偽。 */
+function readBooleanEnv(key: 'LLM_FAKE' | 'LLM_DEBUG' | 'STT_FAKE'): boolean {
+  const value = process.env[key]?.trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on'
 }
 
 function readSttProvider(): SttProviderName {

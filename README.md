@@ -9,6 +9,64 @@
 - 就活生・面接官それぞれの状態（表情・声・発言内容）から優勢度を算出する
 - 優勢度が振り切れた時にカットイン演出を入れる
 
+## 開発環境セットアップ
+
+ツールバージョンは [mise](https://mise.jdx.dev/) で統一している（Node は `mise.toml` で **22 (LTS)** に固定。ローカルと CI が同じ定義を参照する）。
+
+```bash
+# 1. mise を導入（未インストールの場合）
+brew install mise
+# シェルに有効化（zsh の例。詳細は mise のドキュメント参照）
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc && exec zsh
+
+# 2. プロジェクト直下で設定を信頼して Node 22 を導入
+mise trust      # mise.toml を初回のみ信頼する（セキュリティ機能）
+mise install
+
+# 3. 初回セットアップ（依存インストール + .env 作成）
+mise run setup
+#   → npm ci と、.env.example からの .env 作成を行う（既存の .env は上書きしない）
+#   → 作成された .env に各自の API キー（GEMINI_API_KEY 等）を記入する
+```
+
+日常の開発タスク：
+
+```bash
+mise run dev        # 開発起動（electron-vite dev）
+mise run test       # テスト（vitest）
+mise run typecheck  # 型チェック
+mise run build      # ビルド
+```
+
+> 音声ループバック取得など一部機能は macOS 前提（ScreenCaptureKit）。詳細は下記「技術選定」を参照。
+
+### LLM（Gemini判定）のデバッグ
+
+`src/main/llm/geminiJudgeClient.ts` は Electron 非依存なので、アプリを起動せず素の Node で判定を試せる。
+
+```bash
+# 質問と回答を渡して判定（モードは自動判定: 下記参照）
+mise run judge -- "志望動機は？" "御社の理念に共感し、前職での具体的な実績があります"
+
+mise run judge -- "質問" "回答" -v       # 送信プロンプトと生JSON応答も表示
+mise run judge -- "質問" "回答" --debug   # status/レイテンシ等を stderr に出力
+mise run judge -- --file scripts/fixtures/cases.json   # {question, answer} 配列をバッチ実行
+```
+
+判定モードは環境変数で切り替わる（`judgeResponse` のロジック）：
+
+| 条件 | モード | 用途 |
+|---|---|---|
+| `LLM_FAKE=1` | モック | 実APIを呼ばず、入力に応じた**決定的**スコア。キー無し/オフライン/CI/UI結合確認 |
+| `GEMINI_API_KEY` 設定済み | 実API | 本物の Gemini Flash 判定 |
+| どちらも無し | スタブ | 中立50点（フォールバック） |
+
+- `LLM_DEBUG=1` で Gemini 呼び出しの status・レイテンシ・生応答テキストを stderr に出力（**API キーは出力しない**）。
+- エラー経路（HTTPエラー/タイムアウト/不正JSON）は `geminiJudgeClient.test.ts` が fetch をモックして再生する（実APIキー不要）。
+- main プロセスにブレークポイントを張りたい場合は `npx electron-vite dev --inspect` で起動し、`chrome://inspect` や VS Code からアタッチする。
+APIキー（`GEMINI_API_KEY` / `DEEPGRAM_API_KEY`）の取得手順・無料枠・`STT_PROVIDER` ごとの
+必須キー・安全な共有方法は **[docs/development-setup.md](docs/development-setup.md)** を参照。
+
 ## 入力
 
 | 項目 | 取得元 | 対象 |
@@ -34,6 +92,8 @@
 - 優勢度が振り切れた時にカットイン演出を入れる
 
 ## 技術選定
+
+アーキテクチャの妥当性、採用理由、代替案、今後の判断基準は [docs/architecture.md](docs/architecture.md) にまとめている。
 
 ### シェル：Electron
 
@@ -68,14 +128,11 @@
 
 **未解決事項**：MediaPipeと同様、特徴量から「声の焦り」スコアへの変換ロジックは未設計。
 
-### STT：Deepgram streaming **または** Gemini Live STT（未確定）
+### STT：Deepgram streaming（採用決定）
 
-**選定理由**：「質問の返答内容」のテキスト化、「えっとですね」検出には音声のテキスト化が必須。リアルタイムで優勢度を更新するため、streaming対応のSTTが必須。
+**選定理由**：「質問の返答内容」のテキスト化、「えっとですね」検出には音声のテキスト化が必須。リアルタイムで優勢度を更新するため、streaming対応のSTTが必須。**Deepgram に決定**：純粋なstreaming STTで低レイテンシ、かつ `punctuate=false&smart_format=false` で日本語フィラー（えっと/あの等）を整形させず生に近く残せるため、フィラー検出の入力源に適する（Geminiは整形してフィラーを落とすリスクがあった）。
 
-**未確定事項（要決定）**：
-- 日本語フィラー（えっと、あの等）をそのまま残してテキスト化できるか（Geminiは整形してしまうリスクあり）
-- レイテンシ比較
-- 上記2点を実際に試して、Day1〜2で一本化する
+**実装**：`src/main/stt/DeepgramSttProvider.ts`（Node 22 の global WebSocket でサブプロトコル認証 `['token', key]`）。`DEEPGRAM_API_KEY` 未設定 / `STT_FAKE=1` のときは `DummySttProvider` にフォールバック（無キー/オフライン/CIでパイプライン確認可）。Gemini Live STT 実装は将来課題（インターフェースは温存）。
 
 ### 返答内容判定：Gemini Flash + responseSchema
 
@@ -89,7 +146,7 @@
 
 ## 未確定・要検討事項
 
-- [ ] STT: Deepgram streaming vs Gemini Live STT の最終決定（Day1〜2目標）
+- [x] STT: Deepgram streaming vs Gemini Live STT の最終決定 → **Deepgram に決定**（フィラー保持・低レイテンシ）
 - [ ] 顔の焦り度・笑顔度のスコアリングロジック設計（MediaPipeのランドマーク座標→数値化）
 - [ ] 声の焦りのスコアリングロジック設計（Meydaの特徴量→数値化）
 - [ ] 優勢度（0〜100）の計算ロジック（各入力をどう重み付けして合成するか）

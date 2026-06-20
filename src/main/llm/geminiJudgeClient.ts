@@ -1,12 +1,13 @@
 import type { LlmJudgeResponseRequest, LlmJudgeResponseResult } from '../../shared/types/ipc'
-import { getGeminiApiKey } from '../env'
+import { getGeminiApiKey, isLlmDebug, isLlmFake } from '../env'
 import { RESPONSE_JUDGMENT_SCHEMA } from './responseSchema'
 
 /**
  * 返答内容判定に使うGemini Flashモデル。
  * SDKは依存バージョンで仕様が変わりやすいため、ここではREST APIを直接叩く。
+ * gemini-2.0-flash は提供終了（generateContentが404）のため、安定版の 2.5-flash を使用。
  */
-const GEMINI_FLASH_MODEL = 'gemini-2.0-flash'
+const GEMINI_FLASH_MODEL = 'gemini-2.5-flash'
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // リアルタイム用途のため、応答が無い場合は打ち切る（IPCの無期限ハング防止）
 const REQUEST_TIMEOUT_MS = 10_000
@@ -28,6 +29,11 @@ const STUB_SCORE = 50
 export async function judgeResponse(
   request: LlmJudgeResponseRequest
 ): Promise<LlmJudgeResponseResult> {
+  // 分岐順: LLM_FAKE（決定的モック）→ キー未設定（中立スタブ）→ 実API
+  if (isLlmFake()) {
+    return createFakeJudgment(request)
+  }
+
   const apiKey = getGeminiApiKey()
 
   if (!apiKey) {
@@ -36,6 +42,32 @@ export async function judgeResponse(
 
   const rawText = await callGeminiGenerateContent(apiKey, request)
   return parseJudgmentResult(rawText)
+}
+
+/**
+ * 実APIを呼ばずに、入力から決定的なスコアを算出するモック判定（LLM_FAKE 用）。
+ * キー無し/オフライン/CI で、UI・スコア合成パイプラインを入力依存の非定数値で確認するためのもの。
+ * ルールは「目安」であり実モデルの評価ではない（reason に [FAKE] を明示）。
+ */
+export function createFakeJudgment(request: LlmJudgeResponseRequest): LlmJudgeResponseResult {
+  const answer = request.answer ?? ''
+  const trimmed = answer.trim()
+
+  // 回答の長さをベースに、具体性キーワードで加点・フィラーで減点する決定的ヒューリスティック。
+  let raw = STUB_SCORE
+  raw += Math.min(30, Math.floor(trimmed.length / 10) * 2) // 長さ（上限+30）
+  for (const keyword of ['具体的', '結論', 'なぜなら', '実績', '経験']) {
+    if (trimmed.includes(keyword)) raw += 6
+  }
+  for (const filler of ['えっと', 'あの', 'えー', 'うーん']) {
+    if (trimmed.includes(filler)) raw -= 8
+  }
+  if (trimmed.length === 0) raw = 0
+
+  return {
+    score: clampScore(raw),
+    reason: `[FAKE] 実APIを呼ばないモック判定（回答長=${trimmed.length}文字の決定的スコア）。`
+  }
 }
 
 /**
@@ -92,6 +124,9 @@ async function callGeminiGenerateContent(
   request: LlmJudgeResponseRequest
 ): Promise<string> {
   const endpoint = `${GEMINI_API_BASE}/models/${GEMINI_FLASH_MODEL}:generateContent`
+  const startedAt = Date.now()
+
+  debugLog(() => `→ POST ${endpoint}\n  prompt:\n${indent(buildJudgePrompt(request))}`)
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -111,6 +146,8 @@ async function callGeminiGenerateContent(
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   })
 
+  debugLog(() => `← HTTP ${response.status} (${Date.now() - startedAt}ms)`)
+
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '')
     throw new Error(`Gemini API呼び出しに失敗しました (HTTP ${response.status}): ${errorBody.slice(0, 200)}`)
@@ -123,7 +160,23 @@ async function callGeminiGenerateContent(
     throw new Error('Gemini応答に判定テキストが含まれていません。')
   }
 
+  debugLog(() => `  raw response text: ${text}`)
+
   return text
+}
+
+/** LLM_DEBUG 有効時のみ stderr へ出力。APIキー・認証ヘッダは決して渡さないこと。 */
+function debugLog(message: () => string): void {
+  if (isLlmDebug()) {
+    console.error(`[llm:debug] ${message()}`)
+  }
+}
+
+function indent(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => `    ${line}`)
+    .join('\n')
 }
 
 interface GeminiGenerateContentResponse {

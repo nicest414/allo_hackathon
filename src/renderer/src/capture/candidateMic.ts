@@ -1,4 +1,9 @@
 import type { CaptureResult } from './types'
+import {
+  createMeydaVoiceAnalyzer,
+  type MeydaVoiceAnalyzerOptions,
+  type RealtimeVoiceAnalyzer
+} from '../analysis/voice/voiceAnalyzer'
 import { toCaptureErrorInfo } from './types'
 
 export interface CandidateMicOptions {
@@ -9,6 +14,9 @@ export interface CandidateMicOptions {
   sampleRate?: number
   channelCount?: number
 }
+
+export type CandidateMicVoiceAnalyzerOptions = CandidateMicOptions &
+  Omit<MeydaVoiceAnalyzerOptions, 'stream'>
 
 export async function getCandidateMicStream(
   options: CandidateMicOptions = {}
@@ -29,5 +37,31 @@ export async function getCandidateMicStream(
     return { ok: true, stream }
   } catch (error) {
     return { ok: false, error: toCaptureErrorInfo(error) }
+  }
+}
+
+export async function createCandidateMicVoiceAnalyzer(
+  options: CandidateMicVoiceAnalyzerOptions = {}
+): Promise<CaptureResult<RealtimeVoiceAnalyzer>> {
+  const streamResult = await getCandidateMicStream(options)
+
+  if (!streamResult.ok) {
+    return streamResult
+  }
+
+  const analyzer = await createMeydaVoiceAnalyzer({
+    ...options,
+    stream: streamResult.stream
+  })
+
+  return {
+    ok: true,
+    stream: {
+      ...analyzer,
+      async dispose() {
+        await analyzer.dispose()
+        streamResult.stream.getTracks().forEach((track) => track.stop())
+      }
+    }
   }
 }

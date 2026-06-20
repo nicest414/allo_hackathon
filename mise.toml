@@ -1,0 +1,36 @@
+# チーム共通の開発ツール定義（mise）
+# 使い方:
+#   mise install      # 下記 [tools] のバージョンを導入
+#   mise run setup    # 依存インストール + .env 作成（初回）
+#   mise run dev      # 開発起動
+# npm スクリプト（package.json）を真実の源とし、tasks はその薄いラッパー。
+
+[tools]
+node = "22"   # チーム/CI 共通の Node LTS。22.x 系最新を解決する。
+
+[tasks.setup]
+description = "依存インストールと .env テンプレート作成（初回セットアップ）"
+run = [
+  "npm ci",
+  "test -f .env || cp .env.example .env",
+]
+
+[tasks.dev]
+description = "electron-vite 開発起動"
+run = "npm run dev"
+
+[tasks.build]
+description = "typecheck 後にビルド"
+run = "npm run build"
+
+[tasks.test]
+description = "vitest 実行"
+run = "npm test"
+
+[tasks.typecheck]
+description = "型チェック（node 用 / web 用）"
+run = "npm run typecheck"
+
+[tasks.judge]
+description = 'Gemini判定をElectron無しで実行（デバッグ用）。例: mise run judge -- "質問" "回答" -v'
+run = "tsx scripts/judge.ts"

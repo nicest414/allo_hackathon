@@ -6,6 +6,7 @@ import lightningVideo from '../../assets/video/lightning_transparent.webm'
 
 interface DominanceClashBannerProps {
   value: number
+  candidatePortraitSrc?: string
 }
 
 interface ClashBannerStyle extends CSSProperties {
@@ -83,7 +84,10 @@ function BoltGroup({ paths }: { paths: string[] }): ReactElement {
  * 優勢/劣勢を、両陣営の雷が中央でせめぎ合うバナー演出として表示する。
  * 各ゾーンの幅は優勢度に応じて変わり、優勢な側が画面のより広い面積を占有する。
  */
-export function DominanceClashBanner({ value }: DominanceClashBannerProps): ReactElement {
+export function DominanceClashBanner({
+  value,
+  candidatePortraitSrc
+}: DominanceClashBannerProps): ReactElement {
   const clamped = Math.min(100, Math.max(0, Math.round(value)))
   const leftWidth = 100 - clamped
   const rightWidth = clamped
@@ -97,6 +101,7 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
     '--right-width': `${rightWidth}%`,
     '--dominance-intensity': dominanceIntensity.toFixed(2)
   }
+  const rightPortraitSrc = candidatePortraitSrc ?? rightPortrait
 
   return (
     <div
@@ -126,7 +131,7 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
       <div className="clash-banner__portrait-mask clash-banner__portrait-mask--right">
         <img
           className="clash-banner__portrait clash-banner__portrait--right"
-          src={rightPortrait}
+          src={rightPortraitSrc}
           alt=""
           aria-hidden="true"
         />
