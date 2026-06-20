@@ -113,61 +113,69 @@ export function createFaceAnalysisLoop(
   const clearTimer = dependencies.clearTimer ?? ((handle) => clearTimeout(handle))
 
   const sessions: Partial<Record<FaceLoopSubject, FaceLoopSession>> = {}
+  const operationQueues: Record<FaceLoopSubject, Promise<void>> = {
+    candidate: Promise.resolve(),
+    interviewer: Promise.resolve()
+  }
 
   async function startCandidate(
     options: CandidateFaceAnalysisLoopOptions = {}
   ): Promise<FaceAnalysisLoopStartResult> {
-    await stop('candidate')
+    return enqueueOperation('candidate', async () => {
+      await stopNow('candidate')
 
-    const capture = await captureCandidateCamera(options)
-    if (!capture.ok) {
-      reportNeutralFace('candidate')
-      return capture
-    }
+      const capture = await captureCandidateCamera(options)
+      if (!capture.ok) {
+        reportNeutralFace('candidate')
+        return capture
+      }
 
-    sessions.candidate = await createSession(
-      'candidate',
-      capture.stream,
-      createCandidateAnalyzer(),
-      options.fps
-    )
-    scheduleNextFrame(sessions.candidate)
+      sessions.candidate = await createSession(
+        'candidate',
+        capture.stream,
+        createCandidateAnalyzer(),
+        options.fps
+      )
+      scheduleNextFrame(sessions.candidate)
 
-    return { ok: true }
+      return { ok: true }
+    })
   }
 
   async function startInterviewer(
     options: InterviewerFaceAnalysisLoopOptions
   ): Promise<FaceAnalysisLoopStartResult> {
-    await stop('interviewer')
+    return enqueueOperation('interviewer', async () => {
+      await stopNow('interviewer')
 
-    if (!options.sourceId) {
-      reportNeutralFace('interviewer')
-      return {
-        ok: false,
-        error: {
-          code: 'unknown',
-          name: 'ScreenSourceNotSelected',
-          message: '面接官画面の共有元が選択されていません'
+      if (!options.sourceId) {
+        reportNeutralFace('interviewer')
+        return {
+          ok: false,
+          error: {
+            code: 'unknown',
+            name: 'ScreenSourceNotSelected',
+            message: '面接官画面の共有元が選択されていません'
+          }
         }
       }
-    }
 
-    const capture = await captureInterviewerScreen(options)
-    if (!capture.ok) {
-      reportNeutralFace('interviewer')
-      return capture
-    }
+      const capture = await captureInterviewerScreen(options)
+      if (!capture.ok) {
+        reportNeutralFace('interviewer')
+        return capture
+      }
 
-    sessions.interviewer = await createSession(
-      'interviewer',
-      capture.stream,
-      createInterviewerAnalyzer(),
-      options.fps
-    )
-    scheduleNextFrame(sessions.interviewer)
+      sessions.interviewer = await createSession(
+        'interviewer',
+        capture.stream,
+        createInterviewerAnalyzer(),
+        options.fps
+      )
+      scheduleNextFrame(sessions.interviewer)
 
-    return { ok: true }
+      return { ok: true }
+    })
   }
 
   async function createSession(
@@ -214,11 +222,16 @@ export function createFaceAnalysisLoop(
     try {
       if (session.video.readyState >= HAVE_CURRENT_DATA) {
         const result = await session.analyzer.analyze(session.video)
+        if (session.stopped) {
+          return
+        }
         reportFaceScore(scoreFace(result))
       }
     } catch (error) {
-      reportNeutralFace(session.subject)
-      dependencies.onError?.(session.subject, error)
+      if (!session.stopped) {
+        reportNeutralFace(session.subject)
+        dependencies.onError?.(session.subject, error)
+      }
     } finally {
       scheduleNextFrame(session)
     }
@@ -236,7 +249,11 @@ export function createFaceAnalysisLoop(
     reportFaceScore({ subject, value: NEUTRAL_FACE_SCORE })
   }
 
-  async function stop(subject: FaceLoopSubject): Promise<void> {
+  function stop(subject: FaceLoopSubject): Promise<void> {
+    return enqueueOperation(subject, () => stopNow(subject))
+  }
+
+  async function stopNow(subject: FaceLoopSubject): Promise<void> {
     const session = sessions[subject]
     if (!session) {
       return
@@ -260,6 +277,19 @@ export function createFaceAnalysisLoop(
     session.video.srcObject = null
     session.video.remove()
     await session.analyzer.close?.()
+  }
+
+  function enqueueOperation<T>(
+    subject: FaceLoopSubject,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const next = operationQueues[subject].catch(() => undefined).then(operation)
+    operationQueues[subject] = next.then(
+      () => undefined,
+      () => undefined
+    )
+
+    return next
   }
 
   return {

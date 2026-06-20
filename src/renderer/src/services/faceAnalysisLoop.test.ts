@@ -85,6 +85,56 @@ describe('createFaceAnalysisLoop', () => {
     expect(loop.getState()).toEqual({ candidate: false, interviewer: false })
   })
 
+  it('does not report an in-flight analysis result after the loop is stopped', async () => {
+    const track = { stop: vi.fn() }
+    const video = createVideo()
+    const analysis = deferred<FaceAnalysisResult>()
+    const analyzer: FaceAnalyzer = {
+      analyze: vi.fn(() => analysis.promise),
+      close: vi.fn(() => undefined)
+    }
+    const reported: FaceScore[] = []
+    const timers: Array<() => void> = []
+    const frames: FrameRequestCallback[] = []
+
+    const loop = createFaceAnalysisLoop({
+      captureCandidateCamera: async () => ({
+        ok: true,
+        stream: { getTracks: () => [track] } as unknown as MediaStream
+      }),
+      createCandidateAnalyzer: () => analyzer,
+      calculateScore: (result) => ({ subject: result.subject, value: 88 }),
+      reportCandidateFace: (score) => reported.push(score),
+      createVideoElement: () => video,
+      setTimer: (callback) => {
+        timers.push(callback)
+        return timers.length as unknown as ReturnType<typeof setTimeout>
+      },
+      clearTimer: vi.fn(),
+      requestFrame: (callback) => {
+        frames.push(callback)
+        return frames.length
+      },
+      cancelFrame: vi.fn()
+    })
+
+    await loop.startCandidate()
+    timers[0]()
+    frames[0](100)
+
+    await loop.stopCandidate()
+    analysis.resolve({
+      subject: 'candidate',
+      timestamp: 123,
+      tensionLevel: 10,
+      smileLevel: 90,
+      expression: 'smile'
+    })
+    await Promise.resolve()
+
+    expect(reported).toEqual([])
+  })
+
   it('requires interviewer screen source selection before starting', async () => {
     const reported: FaceScore[] = []
     const captureInterviewerScreen = vi.fn()
@@ -141,6 +191,41 @@ describe('createFaceAnalysisLoop', () => {
     expect(cancelFrame).not.toHaveBeenCalled()
     expect(loop.getState()).toEqual({ candidate: false, interviewer: false })
   })
+
+  it('serializes repeated starts and releases the superseded candidate stream', async () => {
+    const firstTrack = { stop: vi.fn() }
+    const secondTrack = { stop: vi.fn() }
+    const clearTimer = vi.fn()
+    const captures = [
+      { getTracks: () => [firstTrack] },
+      { getTracks: () => [secondTrack] }
+    ] as unknown as MediaStream[]
+    let captureIndex = 0
+
+    const loop = createFaceAnalysisLoop({
+      captureCandidateCamera: async () => ({
+        ok: true,
+        stream: captures[captureIndex++]
+      }),
+      createCandidateAnalyzer: () => createAnalyzer({ subject: 'candidate' }),
+      createVideoElement: () => createVideo(),
+      setTimer: () => 123 as unknown as ReturnType<typeof setTimeout>,
+      clearTimer,
+      requestFrame: () => 456,
+      cancelFrame: vi.fn()
+    })
+
+    const firstStart = loop.startCandidate()
+    const secondStart = loop.startCandidate()
+
+    await expect(firstStart).resolves.toEqual({ ok: true })
+    await expect(secondStart).resolves.toEqual({ ok: true })
+
+    expect(firstTrack.stop).toHaveBeenCalledOnce()
+    expect(secondTrack.stop).not.toHaveBeenCalled()
+    expect(clearTimer).toHaveBeenCalledOnce()
+    expect(loop.getState()).toEqual({ candidate: true, interviewer: false })
+  })
 })
 
 function createAnalyzer(
@@ -179,4 +264,16 @@ function createVideo(): HTMLVideoElement & {
     pause: ReturnType<typeof vi.fn>
     remove: ReturnType<typeof vi.fn>
   }
+}
+
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+
+  return { promise, resolve }
 }
