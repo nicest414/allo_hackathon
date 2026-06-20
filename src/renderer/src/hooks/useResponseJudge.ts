@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { calculateResponseScore } from '../domain/scoring/responseScore'
+import { dominanceOrchestrator } from '../services/dominanceOrchestrator'
 import { createResponseJudger } from '../services/responseJudger'
-import { useDominanceStore } from '../store/useDominanceStore'
 
 export interface ResponseJudgeView {
   /** 判定リクエスト中か */
@@ -20,7 +20,6 @@ export interface ResponseJudgeView {
  */
 export function useResponseJudge(): ResponseJudgeView {
   const judger = useMemo(() => createResponseJudger(), [])
-  const setScores = useDominanceStore((state) => state.setScores)
   const [judging, setJudging] = useState(false)
   const [score, setScore] = useState<number | null>(null)
   const [reason, setReason] = useState<string | null>(null)
@@ -45,14 +44,15 @@ export function useResponseJudge(): ResponseJudgeView {
           reason: outcome.result.reason
         })
 
-        setScores({ response: responseScore })
+        // 返答スコアはオーケストレーター経由でStoreへ反映し、優勢度を再計算させる
+        dominanceOrchestrator.reportResponse(responseScore)
         setScore(responseScore)
         setReason(outcome.result.reason)
       } finally {
         setJudging(false)
       }
     },
-    [judger, setScores]
+    [judger]
   )
 
   return { judging, score, reason, judge }
