@@ -1,32 +1,54 @@
-import type { CSSProperties, ReactElement } from 'react'
+import { useState, type CSSProperties, type ReactElement } from 'react'
+import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
 
+const clamp = (value: number): number => Math.min(100, Math.max(0, value))
+
 export function OverlayRoot(): ReactElement {
   useInitialCandidatePortraitImage()
 
+  const baseDominance = useDominanceStore((state) => state.baseDominance)
   const dominance = useDominanceStore((state) => state.dominance)
   const scores = useDominanceStore((state) => state.scores)
   const candidatePortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.candidate
   )
-  const setDominance = useDominanceStore((state) => state.setDominance)
   const reset = useDominanceStore((state) => state.reset)
+
+  // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
+  // オーケストレーター経由の再計算→ゲージ反映を確認できるようにする。
+  const [candidateFace, setCandidateFace] = useState(50)
+
+  const reportCandidateFace = (next: number): void => {
+    const value = clamp(next)
+    setCandidateFace(value)
+    dominanceOrchestrator.reportCandidateFace({ subject: 'candidate', value })
+  }
+
+  const handleReset = (): void => {
+    dominanceOrchestrator.reset()
+    setCandidateFace(50)
+    reset()
+  }
 
   return (
     <div style={styles.root}>
       <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
       <div style={styles.content}>
+        <div style={styles.values}>
+          優勢度: {dominance}（基礎: {baseDominance}）
+        </div>
         <div
           style={styles.controls}
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
-          <button onClick={() => setDominance(dominance - 10)}>劣勢 -10</button>
-          <button onClick={() => setDominance(dominance + 10)}>優勢 +10</button>
-          <button onClick={reset}>リセット</button>
+          <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
+          <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
+          <button onClick={handleReset}>リセット</button>
         </div>
         <ul style={styles.scores}>
           {Object.entries(scores).map(([key, value]) => (
@@ -55,6 +77,11 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: '12px',
     padding: '16px'
+  },
+  values: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '13px'
   },
   controls: {
     display: 'flex',
