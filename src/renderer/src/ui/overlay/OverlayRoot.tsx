@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
+import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
 import { listInterviewerScreenSources } from '../../capture/interviewerScreen'
+import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
 import { useDominanceStore } from '../../store/useDominanceStore'
@@ -28,10 +30,14 @@ export function OverlayRoot(): ReactElement {
   const [screenSources, setScreenSources] = useState<DesktopCaptureSource[]>([])
   const [selectedScreenSourceId, setSelectedScreenSourceId] = useState('')
   const [faceLoopMessage, setFaceLoopMessage] = useState('')
+  const [sttPipelineState, setSttPipelineState] = useState(candidateMicSttPipeline.getState())
+  const [sttMessage, setSttMessage] = useState('')
+  const [latestTranscript, setLatestTranscript] = useState('')
 
   useEffect(() => {
     return () => {
       void faceAnalysisLoop.stopAll()
+      void candidateMicSttPipeline.stop()
     }
   }, [])
 
@@ -43,6 +49,31 @@ export function OverlayRoot(): ReactElement {
 
   const refreshFaceLoopState = (): void => {
     setFaceLoopState(faceAnalysisLoop.getState())
+  }
+
+  const refreshSttPipelineState = (): void => {
+    setSttPipelineState(candidateMicSttPipeline.getState())
+  }
+
+  const handleTranscript = (event: SttTranscriptEvent): void => {
+    setLatestTranscript(event.text)
+  }
+
+  const startSttPipeline = async (): Promise<void> => {
+    const result = await candidateMicSttPipeline.start({
+      chunkMs: 250,
+      sampleRate: 16000,
+      channelCount: 1,
+      onTranscript: handleTranscript
+    })
+    refreshSttPipelineState()
+    setSttMessage(result.ok ? `STT送信中 (${result.sampleRate}Hz)` : result.error.message)
+  }
+
+  const stopSttPipeline = async (): Promise<void> => {
+    await candidateMicSttPipeline.stop()
+    refreshSttPipelineState()
+    setSttMessage('STT送信を停止しました')
   }
 
   const startCandidateFaceLoop = async (): Promise<void> => {
@@ -91,9 +122,12 @@ export function OverlayRoot(): ReactElement {
 
   const handleReset = async (): Promise<void> => {
     await faceAnalysisLoop.stopAll()
+    await candidateMicSttPipeline.stop()
     dominanceOrchestrator.reset()
     setCandidateFace(50)
     refreshFaceLoopState()
+    refreshSttPipelineState()
+    setLatestTranscript('')
     reset()
   }
 
@@ -133,9 +167,18 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startInterviewerFaceLoop()}>面接官開始</button>
           )}
+          {sttPipelineState.running ? (
+            <button onClick={() => void stopSttPipeline()}>STT停止</button>
+          ) : (
+            <button onClick={() => void startSttPipeline()}>STT開始</button>
+          )}
           <button onClick={handleReset}>リセット</button>
         </div>
         {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
+        {sttMessage ? <div style={styles.sttMessage}>{sttMessage}</div> : null}
+        {latestTranscript ? (
+          <div style={styles.transcript}>STT: {latestTranscript}</div>
+        ) : null}
         <ul style={styles.scores}>
           {Object.entries(scores).map(([key, value]) => (
             <li key={key}>
@@ -179,6 +222,18 @@ const styles: Record<string, CSSProperties> = {
     color: '#ffffff',
     fontFamily: 'sans-serif',
     fontSize: '12px'
+  },
+  sttMessage: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '12px'
+  },
+  transcript: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '12px',
+    maxWidth: '720px',
+    overflowWrap: 'anywhere'
   },
   scores: {
     listStyle: 'none',
