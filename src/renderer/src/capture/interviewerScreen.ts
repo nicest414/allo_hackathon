@@ -46,13 +46,26 @@ export async function getInterviewerScreenStream(
 function toDesktopVideoConstraints(
   options: InterviewerScreenOptions
 ): ElectronDesktopVideoConstraints {
+  const mandatory: ElectronDesktopVideoConstraints['mandatory'] = {
+    chromeMediaSource: 'desktop',
+    chromeMediaSourceId: options.sourceId
+  }
+
+  if (options.width !== undefined) {
+    mandatory.maxWidth = options.width
+  }
+
+  if (options.height !== undefined) {
+    mandatory.maxHeight = options.height
+  }
+
+  if (options.frameRate !== undefined) {
+    mandatory.maxFrameRate = options.frameRate
+  }
+
   return {
     mandatory: {
-      chromeMediaSource: 'desktop',
-      chromeMediaSourceId: options.sourceId,
-      maxWidth: options.width,
-      maxHeight: options.height,
-      maxFrameRate: options.frameRate
+      ...mandatory
     }
   }
 }
