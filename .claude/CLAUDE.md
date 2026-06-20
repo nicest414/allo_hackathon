@@ -4,7 +4,21 @@
 
 ## 現状（重要）
 
-ディレクトリ構成のみが用意された骨組み段階。`src/` 以下の全ファイル、`package.json`、`tsconfig*.json`、`electron.vite.config.ts` は中身が空のスタブ（0バイト）。依存関係未定義のため `npm install` / ビルド / 実行は現時点でできない。実装に着手する際は、まず `package.json`（Electron + Vite + React + TypeScript構成）と各 `tsconfig*.json` を整備すること。
+ビルド基盤が整備され、各機能を issue 駆動で並行実装している段階。`package.json`（Electron + Vite + React + TypeScript 構成、Zustand 採用）・`tsconfig*.json`・`electron.vite.config.ts` は整備済みで、以下が実行可能：
+
+- `npm install` — 依存インストール
+- `npm run dev` — electron-vite dev server で起動
+- `npm run build` — `typecheck` 後にビルド
+- `npm run typecheck` — `tsc --noEmit`（node 用 / web 用の 2 系統）
+- `npm test` — vitest 実行
+
+`src/` 配下は機能ごとに実装が進行中（一部は空ファイル/スタブのまま）。新規ファイルを追加する際は下記「ディレクトリ構成」の責務分離を守ること。
+
+## ブランチ運用
+
+- 1 ブランチ = 1 issue を原則とする。
+- ブランチ名は **`feature/issue-<番号>-<slug>`** に統一する（`/start-issue <番号>` がこの規約でブランチを切る）。
+- 着手は `/start-issue` → 実装 → `/commit_and_push` → `/create-pr` の流れ。`create-pr` はブランチ名から `close #<番号>` を自動付与する。
 
 ## アーキテクチャ上の制約（README.mdの設計判断より、必ず守る）
 
@@ -17,11 +31,21 @@
 
 `.env.example` に必要なキー名を列挙済み。実体の `.env` は `.gitignore` 対象なので各自で作成する。
 
-## 利用可能なスラッシュコマンド（`.claude/commands/`）
+## チーム用ハーネス構成（`.claude/`）
 
+git 管理された共有設定でチーム全員の挙動を揃えている。
+
+- **`.claude/settings.json`（共有・コミット対象）**：許可 allowlist（`npm run`・`git`・`gh pr/issue` 読み取り系など、安全なコマンドの確認プロンプトを省略）と、秘密鍵ガード hook の登録、`.env` への deny を定義。
+- **`.claude/settings.local.json`（個人用）**：各自の好み（githubApi MCP 無効化など）。共有しない。
+- **`.claude/hooks/guard-secrets.sh`（PreToolUse ガード）**：`.env`（`.env.example` を除く）への Edit/Read、`cat .env`・`git add .env`・API キーの echo などをブロックする。「API キーは main のみ・`.env` は commit しない」制約を機械的に強制する。
+- **`.claude/agents/electron-architecture-reviewer.md`**：差分をアーキ制約に対して監査する read-only レビュアー（`/review-pr` から、または直接呼べる）。
+
+### スラッシュコマンド（`.claude/commands/`）
+
+- `/start-issue <issue番号>`：issue を要約し、`main` 最新化後に `feature/issue-<番号>-<slug>` ブランチを作成。着手の足がかりを提示（実装はユーザー承認後）。
 - `/commit_and_push`：変更をwhyベースの単位に分類し、ユーザー承認後にコミット・プッシュ。
 - `/create-pr`：差分からPRタイトル・説明文を生成し、ユーザー承認後に `gh pr create`。
-- `/review-pr <PR番号>`：PRをレビュー。⚠️ 現在の内容はFlutter/Riverpod/Clean Architecture前提のレビュー観点になっており、本プロジェクト（Electron/React/TypeScript）の構成と一致していない。使う場合は観点を読み替えるか、このプロジェクト用に更新する必要がある。
+- `/review-pr <PR番号>`：本プロジェクト（Electron/React/TS）のアーキ制約（秘密鍵境界・責務分離・STT 差し替え・IPC 契約）でPRをレビュー。
 - `/apply-review <PR番号>`：PRレビューコメントを分類し、修正対象は実装、議論対象は返信ドラフトを作成。
 
 ## 未確定・要検討事項（README.mdより）
