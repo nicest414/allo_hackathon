@@ -3,6 +3,7 @@ import type {
   AlloPreloadApi,
   CaptureDesktopSourcesResult,
   LlmJudgeResponseResult,
+  ScreenAccessStatus,
   SttTranscriptEvent
 } from '../shared/types/ipc'
 import { IPC_CHANNELS } from '../shared/types/ipc'
@@ -46,6 +47,14 @@ const api: AlloPreloadApi = {
         IPC_CHANNELS.captureDesktopSources,
         request
       ) as Promise<CaptureDesktopSourcesResult>
+    },
+    getScreenAccessStatus: async () => {
+      return ipcRenderer.invoke(
+        IPC_CHANNELS.captureScreenAccessStatus
+      ) as Promise<ScreenAccessStatus>
+    },
+    openScreenSettings: async () => {
+      await ipcRenderer.invoke(IPC_CHANNELS.captureOpenScreenSettings)
     },
     enableLoopbackAudio: async () => {
       await ipcRenderer.invoke(IPC_CHANNELS.captureEnableLoopbackAudio)

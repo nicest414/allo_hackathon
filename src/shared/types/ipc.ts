@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   sttTranscript: 'stt:transcript',
   llmJudgeResponse: 'llm:judge-response',
   captureDesktopSources: 'capture:desktop-sources',
+  captureScreenAccessStatus: 'capture:screen-access-status',
+  captureOpenScreenSettings: 'capture:open-screen-settings',
   captureEnableLoopbackAudio: 'enable-loopback-audio',
   captureDisableLoopbackAudio: 'disable-loopback-audio',
   overlaySetClickThrough: 'overlay:set-click-through'
@@ -41,6 +43,14 @@ export type CaptureDesktopSourcesRequest = DesktopCaptureSourcesRequest
 
 export type CaptureDesktopSourcesResult = DesktopCaptureSource[]
 
+/** macOSの画面収録許可の状態（systemPreferences.getMediaAccessStatus('screen')）。 */
+export type ScreenAccessStatus =
+  | 'not-determined'
+  | 'granted'
+  | 'denied'
+  | 'restricted'
+  | 'unknown'
+
 export interface OverlaySetClickThroughRequest {
   enabled: boolean
 }
@@ -59,6 +69,10 @@ export interface AlloPreloadApi {
     listDesktopSources: (
       request?: CaptureDesktopSourcesRequest
     ) => Promise<CaptureDesktopSourcesResult>
+    /** 画面収録許可の状態を返す（macOS）。未対応OSでは 'granted' を返す。 */
+    getScreenAccessStatus: () => Promise<ScreenAccessStatus>
+    /** OSの画面収録許可の設定画面を開く（macOS）。 */
+    openScreenSettings: () => Promise<void>
     enableLoopbackAudio: () => Promise<void>
     disableLoopbackAudio: () => Promise<void>
   }
