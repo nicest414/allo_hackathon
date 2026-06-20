@@ -37,14 +37,37 @@ export function openScreenSettings(): Promise<void> {
   return window.allo.capture.openScreenSettings()
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(errorMessage))
+    }, timeoutMs)
+    promise.then(
+      (res) => {
+        clearTimeout(timer)
+        resolve(res)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
+}
+
 export async function getInterviewerScreenStream(
   options: InterviewerScreenOptions
 ): Promise<CaptureResult<MediaStream>> {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const getUserMediaPromise = navigator.mediaDevices.getUserMedia({
       audio: false,
       video: toDesktopVideoConstraints(options)
     })
+    const stream = await withTimeout(
+      getUserMediaPromise,
+      4000,
+      '画面キャプチャの開始がタイムアウトしました。画面収録の許可がない可能性があります。'
+    )
 
     return { ok: true, stream }
   } catch (error) {
