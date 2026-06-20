@@ -15,6 +15,7 @@ export interface DominanceScores {
 
 export interface PortraitImageUrls {
   candidate?: string
+  interviewer?: string
 }
 
 interface DominanceState {
@@ -27,6 +28,7 @@ interface DominanceState {
   setDominance: (dominance: number) => void
   setScores: (scores: Partial<DominanceScores>) => void
   setCandidatePortraitImageUrl: (url: string) => void
+  setInterviewerPortraitImageUrl: (url: string) => void
   reset: () => void
 }
 
@@ -95,6 +97,13 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
       portraitImageUrls: {
         ...state.portraitImageUrls,
         candidate: url
+      }
+    })),
+  setInterviewerPortraitImageUrl: (url) =>
+    set((state) => ({
+      portraitImageUrls: {
+        ...state.portraitImageUrls,
+        interviewer: url
       }
     })),
   reset: () =>

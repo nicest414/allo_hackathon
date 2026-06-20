@@ -19,6 +19,10 @@ import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopba
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { voiceAnalysisLoop } from '../../services/voiceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
+import {
+  captureAndStoreCandidatePortrait,
+  captureAndStoreInterviewerPortrait
+} from '../../services/portraitCaptureService'
 import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fillerDetector'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
@@ -35,6 +39,9 @@ export function OverlayRoot(): ReactElement {
   const scores = useDominanceStore((state) => state.scores)
   const candidatePortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.candidate
+  )
+  const interviewerPortraitImageUrl = useDominanceStore(
+    (state) => state.portraitImageUrls.interviewer
   )
   const setScores = useDominanceStore((state) => state.setScores)
   const setDominance = useDominanceStore((state) => state.setDominance)
@@ -128,11 +135,7 @@ export function OverlayRoot(): ReactElement {
   }
 
   const startSttPipeline = async (): Promise<void> => {
-    if (interviewerLoopbackSttPipeline.getState().running) {
-      await interviewerLoopbackSttPipeline.stop()
-      refreshInterviewerSttPipelineState()
-    }
-
+    // speaker付きSTTになったため、就活生マイクと面接官ループバックは同時に動かせる。
     const result = await candidateMicSttPipeline.start({
       chunkMs: 250,
       sampleRate: 16000,
@@ -166,19 +169,14 @@ export function OverlayRoot(): ReactElement {
   }
 
   const handleInterviewerTranscript = (event: SttTranscriptEvent): void => {
-    setLatestTranscript(event.text)
-
+    // 就活生STTと同時に動くため、面接官は「面接官質問」行のみ更新する（STT:行は就活生用）。
     if (event.isFinal && event.text.trim() !== '') {
       setLatestInterviewerQuestion(event.text)
     }
   }
 
   const startInterviewerSttPipeline = async (): Promise<void> => {
-    if (candidateMicSttPipeline.getState().running) {
-      await candidateMicSttPipeline.stop()
-      refreshSttPipelineState()
-    }
-
+    // 就活生STTと同時に面接官STTを動かせる（speaker付きSTT）。
     const result = await interviewerLoopbackSttPipeline.start({
       chunkMs: 250,
       language: 'ja-JP',
@@ -254,12 +252,43 @@ export function OverlayRoot(): ReactElement {
     })
     refreshFaceLoopState()
     setFaceLoopMessage(result.ok ? '面接官画面解析中' : result.error.message)
+
+    if (result.ok) {
+      void captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId }).catch(
+        (error: unknown) => {
+          console.warn('Failed to initialize interviewer portrait image', error)
+        }
+      )
+    }
   }
 
   const stopInterviewerFaceLoop = async (): Promise<void> => {
     await faceAnalysisLoop.stopInterviewer()
     refreshFaceLoopState()
     setFaceLoopMessage('面接官画面解析を停止しました')
+  }
+
+  const retakeCandidatePortrait = async (): Promise<void> => {
+    setFaceLoopMessage('顔写真を再取得しています…')
+    const imageUrl = await captureAndStoreCandidatePortrait()
+    setFaceLoopMessage(
+      imageUrl ? '候補者の顔写真を再取得しました' : '候補者の顔写真の再取得に失敗しました'
+    )
+  }
+
+  const retakeInterviewerPortrait = async (): Promise<void> => {
+    if (!selectedScreenSourceId) {
+      setFaceLoopMessage('面接官の画面ソースが未選択です')
+      return
+    }
+
+    setFaceLoopMessage('面接官の顔写真を再取得しています…')
+    const imageUrl = await captureAndStoreInterviewerPortrait({
+      sourceId: selectedScreenSourceId
+    })
+    setFaceLoopMessage(
+      imageUrl ? '面接官の顔写真を再取得しました' : '面接官の顔写真の再取得に失敗しました'
+    )
   }
 
   const handleReset = async (): Promise<void> => {
@@ -283,7 +312,11 @@ export function OverlayRoot(): ReactElement {
 
   return (
     <div style={styles.root}>
-      <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
+      <DominanceClashBanner
+        value={dominance}
+        candidatePortraitSrc={candidatePortraitImageUrl}
+        interviewerPortraitSrc={interviewerPortraitImageUrl}
+      />
       <div style={styles.content}>
         <div style={styles.values}>
           優勢度: {dominance}（基礎: {baseDominance}）
@@ -302,6 +335,7 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startCandidateFaceLoop()}>カメラ開始</button>
           )}
+          <button onClick={() => void retakeCandidatePortrait()}>顔写真再取得（自分）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (
             <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
@@ -322,6 +356,7 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startInterviewerFaceLoop()}>面接官開始</button>
           )}
+          <button onClick={() => void retakeInterviewerPortrait()}>顔写真再取得（相手）</button>
           {sttPipelineState.running ? (
             <button onClick={() => void stopSttPipeline()}>STT停止</button>
           ) : (

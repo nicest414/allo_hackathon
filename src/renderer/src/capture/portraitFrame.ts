@@ -1,5 +1,6 @@
 import type { CaptureResult } from './types'
 import { getCandidateCameraStream } from './candidateCamera'
+import { getInterviewerScreenStream } from './interviewerScreen'
 import type { FaceLandmarker, NormalizedFaceLandmark } from '../analysis/face/faceLandmarker'
 
 export interface PortraitFrameOptions {
@@ -29,6 +30,43 @@ export async function captureCandidatePortraitImage(
   const streamResult = await getCandidateCameraStream({
     width: options.width ?? defaultPortraitFrameOptions.width,
     height: options.height ?? defaultPortraitFrameOptions.height,
+    frameRate: 10
+  })
+
+  if (!streamResult.ok) {
+    return streamResult
+  }
+
+  try {
+    const imageUrl = await capturePortraitFrame(streamResult.stream, options)
+    return { ok: true, stream: imageUrl }
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'unknown',
+        message: error instanceof Error ? error.message : '顔画像の取得に失敗しました',
+        name: error instanceof Error ? error.name : undefined
+      }
+    }
+  } finally {
+    stopMediaStream(streamResult.stream)
+  }
+}
+
+export interface InterviewerPortraitFrameOptions extends PortraitFrameOptions {
+  sourceId: string
+}
+
+const interviewerScreenCaptureResolution = { width: 1280, height: 720 }
+
+export async function captureInterviewerPortraitImage(
+  options: InterviewerPortraitFrameOptions
+): Promise<CaptureResult<string>> {
+  const streamResult = await getInterviewerScreenStream({
+    sourceId: options.sourceId,
+    width: interviewerScreenCaptureResolution.width,
+    height: interviewerScreenCaptureResolution.height,
     frameRate: 10
   })
 

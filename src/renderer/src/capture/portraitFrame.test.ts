@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { calculateFaceCropBox, capturePortraitFrame } from './portraitFrame'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  calculateFaceCropBox,
+  captureInterviewerPortraitImage,
+  capturePortraitFrame
+} from './portraitFrame'
 import type { NormalizedFaceLandmark } from '../analysis/face/faceLandmarker'
+
+vi.mock('./interviewerScreen', () => ({
+  getInterviewerScreenStream: vi.fn()
+}))
+
+import { getInterviewerScreenStream } from './interviewerScreen'
+
+const getStream = vi.mocked(getInterviewerScreenStream)
 
 describe('calculateFaceCropBox', () => {
   it('returns a padded square crop around face landmarks', () => {
@@ -58,6 +70,28 @@ describe('capturePortraitFrame', () => {
     await expect(
       capturePortraitFrame({} as MediaStream, options)
     ).rejects.toThrow('正の有限値')
+  })
+})
+
+describe('captureInterviewerPortraitImage', () => {
+  it('requests a high-resolution screen stream and passes through acquisition errors', async () => {
+    getStream.mockResolvedValue({
+      ok: false,
+      error: { code: 'permission-denied', message: 'denied' }
+    })
+
+    const result = await captureInterviewerPortraitImage({ sourceId: 'screen:1' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'permission-denied', message: 'denied' }
+    })
+    expect(getStream).toHaveBeenCalledWith({
+      sourceId: 'screen:1',
+      width: 1280,
+      height: 720,
+      frameRate: 10
+    })
   })
 })
 

@@ -15,8 +15,8 @@ const api: AlloPreloadApi = {
     start: async (request) => {
       await ipcRenderer.invoke(IPC_CHANNELS.sttStart, request)
     },
-    stop: async () => {
-      await ipcRenderer.invoke(IPC_CHANNELS.sttStop)
+    stop: async (speaker) => {
+      await ipcRenderer.invoke(IPC_CHANNELS.sttStop, speaker)
     },
     sendAudioChunk: async (request) => {
       await ipcRenderer.invoke(IPC_CHANNELS.sttAudioChunk, request)

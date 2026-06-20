@@ -1,5 +1,7 @@
 import type { CaptureErrorInfo } from '../../../shared/types/capture'
-import type { SttTranscriptEvent } from '../../../shared/types/ipc'
+import type { SttSpeaker, SttTranscriptEvent } from '../../../shared/types/ipc'
+
+const SPEAKER: SttSpeaker = 'candidate'
 import {
   getCandidateMicStream,
   type CandidateMicOptions
@@ -94,9 +96,14 @@ export function createCandidateMicSttPipeline(
         const sampleRate = audioContext.sampleRate
         await resumeAudioContext(audioContext)
         if (transcriptListener) {
-          unsubscribeTranscript = subscribeTranscript(transcriptListener)
+          // 自分の話者のtranscriptだけを呼び出し元へ渡す（面接官と同時購読するため）。
+          unsubscribeTranscript = subscribeTranscript((event) => {
+            if (event.speaker === SPEAKER) {
+              transcriptListener(event)
+            }
+          })
         }
-        await startSttService({ sampleRate, language })
+        await startSttService({ sampleRate, language, speaker: SPEAKER })
 
         const nextSession = createSession(micResult.stream, audioContext, options)
         session = nextSession
@@ -182,7 +189,7 @@ export function createCandidateMicSttPipeline(
           return
         }
 
-        await sendAudioChunk({ audio })
+        await sendAudioChunk({ audio, speaker: SPEAKER })
       })
       .catch((error: unknown) => {
         dependencies.onError?.(error)
@@ -207,7 +214,7 @@ export function createCandidateMicSttPipeline(
     if (activeSession.audioContext.state !== 'closed') {
       await activeSession.audioContext.close()
     }
-    await stopSttService()
+    await stopSttService(SPEAKER)
   }
 
   async function cleanupFailedStart(
@@ -218,7 +225,7 @@ export function createCandidateMicSttPipeline(
     if (audioContext && audioContext.state !== 'closed') {
       await audioContext.close()
     }
-    await stopSttService().catch((error: unknown) => {
+    await stopSttService(SPEAKER).catch((error: unknown) => {
       dependencies.onError?.(error)
     })
   }
