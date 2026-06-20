@@ -144,8 +144,8 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
         </div>
         <div className="clash-banner__value">{clamped}</div>
       </div>
-      <span className="clash-banner__label clash-banner__label--left">劣勢</span>
-      <span className="clash-banner__label clash-banner__label--right">優勢</span>
+      <span className="clash-banner__label clash-banner__label--left">You</span>
+      <span className="clash-banner__label clash-banner__label--right">相手</span>
     </div>
   )
 }

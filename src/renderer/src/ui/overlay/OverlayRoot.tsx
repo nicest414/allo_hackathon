@@ -17,8 +17,8 @@ export function OverlayRoot(): ReactElement {
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
-          <button onClick={() => setDominance(dominance - 10)}>劣勢 -10</button>
-          <button onClick={() => setDominance(dominance + 10)}>優勢 +10</button>
+          <button onClick={() => setDominance(dominance - 10)}>You -10</button>
+          <button onClick={() => setDominance(dominance + 10)}>相手 +10</button>
           <button onClick={reset}>リセット</button>
         </div>
         <ul style={styles.scores}>
