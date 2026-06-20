@@ -202,7 +202,6 @@
   width: clamp(88px, 16vw, 220px);
   object-fit: cover;
   z-index: 2;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 16px rgba(255, 255, 255, 0.12));
   transition: left 0.35s ease-out, right 0.35s ease-out;
 }
 
@@ -211,6 +210,18 @@
   object-position: 68% top;
   /* 中央(右辺)を斜めにそぎ落として前のめりな勢いを出す */
   clip-path: polygon(0 0, 84% 0, 100% 100%, 0 100%);
+  /*
+   * 上部(頭頂)と外側(左辺)を黒→透明のグラデーションでフェードさせ、
+   * 四角い切り抜きがそのまま見切れる「証明写真感」を消して背景に溶け込ませる。
+   * 中心は内側下(衝突点側)に置き、そこから離れるほど透明度を上げる。
+   */
+  mask-image: radial-gradient(85% 95% at 82% 88%, #000 62%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  -webkit-mask-image: radial-gradient(85% 95% at 82% 88%, #000 62%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  /* フェードで消えた輪郭線の代わりに陣営カラーの光彩を纏わせ、背景となじませる */
+  filter:
+    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 0 18px rgba(70, 212, 255, 0.55))
+    drop-shadow(0 0 32px rgba(30, 193, 255, 0.35));
 }
 
 .clash-banner__portrait--right {
@@ -218,6 +229,12 @@
   object-position: center 22%;
   /* 中央(左辺)を斜めにそぎ落として前のめりな勢いを出す */
   clip-path: polygon(16% 0, 100% 0, 100% 100%, 0 100%);
+  mask-image: radial-gradient(85% 95% at 18% 88%, #000 62%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  -webkit-mask-image: radial-gradient(85% 95% at 18% 88%, #000 62%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  filter:
+    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 0 18px rgba(255, 77, 244, 0.55))
+    drop-shadow(0 0 32px rgba(255, 21, 196, 0.35));
 }
 
 .clash-banner__clash {
