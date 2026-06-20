@@ -20,7 +20,7 @@ cp .env.example .env   # .env を作成して各キーを記入する
 2. 「Create API key」でキーを発行
 3. 発行された文字列を `.env` の `GEMINI_API_KEY=` に貼り付ける
 
-- 用途: 返答内容判定（Gemini Flash）。`STT_PROVIDER=gemini_live` のときはSTTでも使用。
+- 用途: 返答内容判定（Gemini Flash）。
 - 料金: 無料枠あり（レート制限つき）。ハッカソンの検証用途は基本的に無料枠で足りる想定。
   ※無料枠の範囲・レート制限は変更され得るため、利用前に上記ページで最新条件を確認する。
 
@@ -35,15 +35,12 @@ cp .env.example .env   # .env を作成して各キーを記入する
 
 ## 3. STT_PROVIDER と必須キーの対応
 
-`.env` の `STT_PROVIDER` で使うSTT実装を切り替える。選んだ方式に応じて必須キーが変わる。
+`.env` の `STT_PROVIDER` は現在 `deepgram` のみ対応している。
 
 | STT_PROVIDER | STTで必須のキー | 返答内容判定で必須のキー |
 |---|---|---|
 | `deepgram`（既定） | `DEEPGRAM_API_KEY` | `GEMINI_API_KEY` |
-| `gemini_live` | `GEMINI_API_KEY` | `GEMINI_API_KEY` |
 
-- `gemini_live` を採用する場合、Deepgramキーは不要になり得る。STT方式の最終決定（README
-  「未確定・要検討事項」）と合わせて進める。
 - `STT_PROVIDER` に上記以外の値を入れると `src/main/env.ts` が明示的にエラーを投げる。
 
 ## 4. キーの安全な共有

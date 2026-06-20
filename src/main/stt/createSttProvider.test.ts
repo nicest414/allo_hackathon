@@ -3,7 +3,6 @@ import { resetMainEnvForTest } from '../env'
 import { createSttProvider } from './createSttProvider'
 import { DeepgramSttProvider } from './DeepgramSttProvider'
 import { DummySttProvider } from './DummySttProvider'
-import { GeminiLiveSttProvider } from './GeminiLiveSttProvider'
 
 describe('createSttProvider', () => {
   const original = {
@@ -14,9 +13,9 @@ describe('createSttProvider', () => {
 
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    delete process.env.STT_PROVIDER
-    delete process.env.DEEPGRAM_API_KEY
-    delete process.env.STT_FAKE
+    process.env.STT_PROVIDER = ''
+    process.env.DEEPGRAM_API_KEY = ''
+    process.env.STT_FAKE = ''
     resetMainEnvForTest()
   })
 
@@ -49,10 +48,10 @@ describe('createSttProvider', () => {
     expect(createSttProvider()).toBeInstanceOf(DeepgramSttProvider)
   })
 
-  it('STT_PROVIDER=gemini_live は GeminiLiveSttProvider を返す', () => {
+  it('STT_PROVIDER=gemini_live は不正値として拒否する', () => {
     process.env.STT_PROVIDER = 'gemini_live'
     resetMainEnvForTest()
-    expect(createSttProvider()).toBeInstanceOf(GeminiLiveSttProvider)
+    expect(() => createSttProvider()).toThrow('Invalid STT_PROVIDER "gemini_live"')
   })
 })
 

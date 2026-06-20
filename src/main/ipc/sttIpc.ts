@@ -14,23 +14,34 @@ export function registerSttIpc(getTargetWindow: () => Electron.BrowserWindow | n
   let provider: SttProvider | undefined
   let unsubscribeTranscript: (() => void) | undefined
 
-  ipcMain.handle(IPC_CHANNELS.sttStart, async (_event, request: SttStartRequest) => {
+  async function stopActiveProvider(): Promise<void> {
+    const activeProvider = provider
+    provider = undefined
     unsubscribeTranscript?.()
+    unsubscribeTranscript = undefined
+    await activeProvider?.stop()
+  }
 
-    provider = createSttProvider()
-    unsubscribeTranscript = provider.onTranscript((segment) => {
+  ipcMain.handle(IPC_CHANNELS.sttStart, async (_event, request: SttStartRequest) => {
+    await stopActiveProvider()
+
+    const nextProvider = createSttProvider()
+    provider = nextProvider
+    unsubscribeTranscript = nextProvider.onTranscript((segment) => {
       const payload: SttTranscriptEvent = { text: segment.text, isFinal: segment.isFinal }
       getTargetWindow()?.webContents.send(IPC_CHANNELS.sttTranscript, payload)
     })
 
-    await provider.start(request)
+    try {
+      await nextProvider.start(request)
+    } catch (error) {
+      await stopActiveProvider()
+      throw error
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.sttStop, async () => {
-    await provider?.stop()
-    unsubscribeTranscript?.()
-    unsubscribeTranscript = undefined
-    provider = undefined
+    await stopActiveProvider()
   })
 
   ipcMain.handle(IPC_CHANNELS.sttAudioChunk, async (_event, request: SttAudioChunkRequest) => {

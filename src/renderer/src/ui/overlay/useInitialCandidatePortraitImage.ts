@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { createMediaPipeFaceLandmarker } from '../../analysis/face/mediapipeFaceLandmarker'
+import { createFaceLandmarker } from '../../analysis/face/faceLandmarker'
 import { captureCandidatePortraitImage } from '../../capture/portraitFrame'
 import { useDominanceStore } from '../../store/useDominanceStore'
 
@@ -41,10 +41,7 @@ function getInitialCandidatePortraitImage(): Promise<string | undefined> {
 }
 
 async function captureWithMediaPipeFaceCrop(): Promise<string | undefined> {
-  const landmarker = await createMediaPipeFaceLandmarker().catch((error: unknown) => {
-    console.warn('Failed to initialize MediaPipe face landmarker', error)
-    return undefined
-  })
+  const landmarker = createFaceLandmarker()
 
   try {
     const result = await captureCandidatePortraitImage({ landmarker })
@@ -56,6 +53,8 @@ async function captureWithMediaPipeFaceCrop(): Promise<string | undefined> {
     console.warn('Failed to capture candidate portrait image', result.error)
     return undefined
   } finally {
-    await landmarker?.close?.()
+    await Promise.resolve(landmarker.close?.()).catch((error: unknown) => {
+      console.warn('Failed to close MediaPipe face landmarker', error)
+    })
   }
 }

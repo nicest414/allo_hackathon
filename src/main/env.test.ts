@@ -54,13 +54,13 @@ describe('main env', () => {
       [
         'GEMINI_API_KEY=gemini-secret',
         'DEEPGRAM_API_KEY=deepgram-secret',
-        'STT_PROVIDER=gemini_live'
+        'STT_PROVIDER=deepgram'
       ].join('\n')
     )
 
     expect(getGeminiApiKey()).toBe('gemini-secret')
     expect(getDeepgramApiKey()).toBe('deepgram-secret')
-    expect(getSttProvider()).toBe('gemini_live')
+    expect(getSttProvider()).toBe('deepgram')
   })
 
   it('defaults to deepgram and treats blank API keys as unset', () => {
@@ -74,7 +74,7 @@ describe('main env', () => {
   it('does not override environment variables that already exist', () => {
     process.env.GEMINI_API_KEY = 'shell-gemini'
     process.env.STT_PROVIDER = 'deepgram'
-    writeFileSync(join(tempDir, '.env'), 'GEMINI_API_KEY=file-gemini\nSTT_PROVIDER=gemini_live\n')
+    writeFileSync(join(tempDir, '.env'), 'GEMINI_API_KEY=file-gemini\nSTT_PROVIDER=unknown\n')
 
     expect(getGeminiApiKey()).toBe('shell-gemini')
     expect(getSttProvider()).toBe('deepgram')
