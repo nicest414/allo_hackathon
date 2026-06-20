@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
+import { ResponseJudgePanel } from './ResponseJudgePanel'
 
 export function OverlayRoot(): ReactElement {
   const dominance = useDominanceStore((state) => state.dominance)
@@ -28,6 +29,7 @@ export function OverlayRoot(): ReactElement {
             </li>
           ))}
         </ul>
+        <ResponseJudgePanel />
       </div>
     </div>
   )
