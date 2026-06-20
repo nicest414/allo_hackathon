@@ -28,6 +28,7 @@ import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
+import { useAutoResponseJudge } from '../../hooks/useAutoResponseJudge'
 
 const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
@@ -82,6 +83,9 @@ export function OverlayRoot(): ReactElement {
       }
     })
   }, [])
+  // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
+  const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
+  const auto = useAutoResponseJudge(autoJudgeEnabled)
 
   // 直近 windowMs 内のfinal transcriptだけでフィラーを再評価し、Storeへ反映する。
   // 黙る/きれいに話すと古いフィラーが窓から抜けてスコアが下がる（=ゲージが揺れ動く）。
@@ -145,6 +149,9 @@ export function OverlayRoot(): ReactElement {
       { timestamp: Date.now(), text: event.text, isFinal: true }
     ]
     recomputeFiller()
+
+    // 自動判定ON時：就活生の確定発話を「回答」として渡す（沈黙検知で自動判定）。
+    auto.reportAnswer(event.text)
   }
 
   const startSttPipeline = async (): Promise<void> => {
@@ -185,6 +192,8 @@ export function OverlayRoot(): ReactElement {
     // 就活生STTと同時に動くため、面接官は「面接官質問」行のみ更新する（STT:行は就活生用）。
     if (event.isFinal && event.text.trim() !== '') {
       setLatestInterviewerQuestion(event.text)
+      // 自動判定ON時：面接官の確定発話を「質問」として渡す（新ターン開始）。
+      auto.reportQuestion(event.text)
     }
   }
 
@@ -207,18 +216,6 @@ export function OverlayRoot(): ReactElement {
     await interviewerLoopbackSttPipeline.stop()
     refreshInterviewerSttPipelineState()
     setInterviewerSttMessage('面接官STT送信を停止しました')
-  }
-
-  const startCandidateFaceLoop = async (): Promise<void> => {
-    const result = await faceAnalysisLoop.startCandidate({ fps: 6, width: 640, height: 480 })
-    refreshFaceLoopState()
-    setFaceLoopMessage(result.ok ? '就活生カメラ解析中' : result.error.message)
-  }
-
-  const stopCandidateFaceLoop = async (): Promise<void> => {
-    await faceAnalysisLoop.stopCandidate()
-    refreshFaceLoopState()
-    setFaceLoopMessage('就活生カメラ解析を停止しました')
   }
 
   const loadScreenSources = async (): Promise<void> => {
@@ -256,51 +253,66 @@ export function OverlayRoot(): ReactElement {
     }
   }
 
-  const startInterviewerFaceLoop = async (): Promise<void> => {
-    const result = await faceAnalysisLoop.startInterviewer({
+  const startCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
+    const candidateResult = await faceAnalysisLoop.startCandidate({
+      fps: 6,
+      width: 640,
+      height: 480
+    })
+    const interviewerResult = await faceAnalysisLoop.startInterviewer({
       sourceId: selectedScreenSourceId,
       fps: 4,
       width: 1280,
       height: 720
     })
     refreshFaceLoopState()
-    setFaceLoopMessage(result.ok ? '面接官画面解析中' : result.error.message)
 
-    if (result.ok) {
+    if (interviewerResult.ok) {
       void captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId }).catch(
         (error: unknown) => {
           console.warn('Failed to initialize interviewer portrait image', error)
         }
       )
     }
-  }
 
-  const stopInterviewerFaceLoop = async (): Promise<void> => {
-    await faceAnalysisLoop.stopInterviewer()
-    refreshFaceLoopState()
-    setFaceLoopMessage('面接官画面解析を停止しました')
-  }
-
-  const retakeCandidatePortrait = async (): Promise<void> => {
-    setFaceLoopMessage('顔写真を再取得しています…')
-    const imageUrl = await captureAndStoreCandidatePortrait()
+    const failureMessages: string[] = []
+    if (!candidateResult.ok) {
+      failureMessages.push(`就活生カメラ解析に失敗しました: ${candidateResult.error.message}`)
+    }
+    if (!interviewerResult.ok) {
+      failureMessages.push(`面接官画面解析に失敗しました: ${interviewerResult.error.message}`)
+    }
     setFaceLoopMessage(
-      imageUrl ? '候補者の顔写真を再取得しました' : '候補者の顔写真の再取得に失敗しました'
+      failureMessages.length > 0 ? failureMessages.join(' / ') : '就活生カメラ・面接官画面の解析中'
     )
   }
 
-  const retakeInterviewerPortrait = async (): Promise<void> => {
+  const stopCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
+    await faceAnalysisLoop.stopAll()
+    refreshFaceLoopState()
+    setFaceLoopMessage('就活生カメラ・面接官画面の解析を停止しました')
+  }
+
+  const retakeCandidateAndInterviewerPortraits = async (): Promise<void> => {
+    setFaceLoopMessage('顔写真を再取得しています…')
+
+    const candidateImageUrl = await captureAndStoreCandidatePortrait()
+    const interviewerImageUrl = selectedScreenSourceId
+      ? await captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId })
+      : null
+
+    const failureMessages: string[] = []
+    if (!candidateImageUrl) {
+      failureMessages.push('候補者の顔写真の再取得に失敗しました')
+    }
     if (!selectedScreenSourceId) {
-      setFaceLoopMessage('面接官の画面ソースが未選択です')
-      return
+      failureMessages.push('面接官の画面ソースが未選択です')
+    } else if (!interviewerImageUrl) {
+      failureMessages.push('面接官の顔写真の再取得に失敗しました')
     }
 
-    setFaceLoopMessage('面接官の顔写真を再取得しています…')
-    const imageUrl = await captureAndStoreInterviewerPortrait({
-      sourceId: selectedScreenSourceId
-    })
     setFaceLoopMessage(
-      imageUrl ? '面接官の顔写真を再取得しました' : '面接官の顔写真の再取得に失敗しました'
+      failureMessages.length > 0 ? failureMessages.join(' / ') : '顔写真を再取得しました'
     )
   }
 
@@ -320,6 +332,7 @@ export function OverlayRoot(): ReactElement {
     finalTranscriptsRef.current = []
     setFillerSummary('')
     setVoiceLoopMessage('')
+    auto.reset()
     reset()
   }
 
@@ -343,12 +356,6 @@ export function OverlayRoot(): ReactElement {
           <button onClick={() => setDominance(dominance + 10)}>You +10</button>
           <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
           <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
-          {faceLoopState.candidate ? (
-            <button onClick={() => void stopCandidateFaceLoop()}>カメラ停止</button>
-          ) : (
-            <button onClick={() => void startCandidateFaceLoop()}>カメラ開始</button>
-          )}
-          <button onClick={() => void retakeCandidatePortrait()}>顔写真再取得（自分）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (
             <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
@@ -364,12 +371,18 @@ export function OverlayRoot(): ReactElement {
               </option>
             ))}
           </select>
-          {faceLoopState.interviewer ? (
-            <button onClick={() => void stopInterviewerFaceLoop()}>面接官停止</button>
+          {faceLoopState.candidate || faceLoopState.interviewer ? (
+            <button onClick={() => void stopCandidateAndInterviewerFaceLoops()}>
+              カメラ・面接官停止
+            </button>
           ) : (
-            <button onClick={() => void startInterviewerFaceLoop()}>面接官開始</button>
+            <button onClick={() => void startCandidateAndInterviewerFaceLoops()}>
+              カメラ・面接官開始
+            </button>
           )}
-          <button onClick={() => void retakeInterviewerPortrait()}>顔写真再取得（相手）</button>
+          <button onClick={() => void retakeCandidateAndInterviewerPortraits()}>
+            顔写真再取得
+          </button>
           {sttPipelineState.running ? (
             <button onClick={() => void stopSttPipeline()}>STT停止</button>
           ) : (
@@ -385,6 +398,9 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startInterviewerSttPipeline()}>面接官STT開始</button>
           )}
+          <button onClick={() => setAutoJudgeEnabled((value) => !value)}>
+            自動判定: {autoJudgeEnabled ? 'ON' : 'OFF'}
+          </button>
           <button onClick={handleReset}>リセット</button>
         </div>
         {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
@@ -400,6 +416,14 @@ export function OverlayRoot(): ReactElement {
           <div style={styles.transcript}>面接官質問: {latestInterviewerQuestion}</div>
         ) : null}
         {fillerSummary ? <div style={styles.sttMessage}>{fillerSummary}</div> : null}
+        {autoJudgeEnabled ? (
+          <div style={styles.sttMessage}>
+            自動判定ON（沈黙2.5秒で発火）
+            {auto.judging ? ' — 判定中…' : ''}
+            {auto.score !== null ? ` / response: ${auto.score}` : ''}
+            {auto.reason ? ` — ${auto.reason}` : ''}
+          </div>
+        ) : null}
         <ul style={styles.scores}>
           {Object.entries(scores).map(([key, value]) => (
             <li key={key}>

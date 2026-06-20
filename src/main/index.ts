@@ -33,6 +33,21 @@ app.whenReady().then(() => {
   registerSttIpc(() => overlayWindow)
   registerWindowIpc(() => overlayWindow)
 
+  // レンダラープロセスからの navigator.mediaDevices.getDisplayMedia 呼び出しを自動処理する。
+  // macOS でシステムループバック音声を取得するための 'loopback' ターゲットを設定。
+  electron.session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    electron.desktopCapturer.getSources({ types: ['screen'] })
+      .then((sources) => {
+        callback({
+          video: sources[0],
+          audio: 'loopback'
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to get display media request sources:', error)
+      })
+  })
+
   app.on('activate', () => {
     // macOS: Dockアイコンクリック時にウィンドウが無ければ再生成する
     if (BrowserWindow.getAllWindows().length === 0) {
