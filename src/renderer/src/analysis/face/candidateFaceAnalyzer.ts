@@ -37,10 +37,20 @@ export function toFaceAnalysisResult(
   result: FaceLandmarkerResult | null,
   fallbackTimestamp = Date.now()
 ): FaceAnalysisResult {
-  if (result === null || result.landmarks.length === 0) {
+  if (result === null) {
     return {
       subject,
       timestamp: fallbackTimestamp,
+      tensionLevel: 0,
+      smileLevel: 0,
+      expression: 'unknown'
+    }
+  }
+
+  if (result.landmarks.length === 0) {
+    return {
+      subject,
+      timestamp: result.timestamp,
       tensionLevel: 0,
       smileLevel: 0,
       expression: 'unknown'

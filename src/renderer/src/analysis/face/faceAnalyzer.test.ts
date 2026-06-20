@@ -20,6 +20,25 @@ describe('face analyzers', () => {
     })
   })
 
+  it('preserves the landmarker timestamp when a face result has no landmarks', () => {
+    const result = toFaceAnalysisResult(
+      'candidate',
+      {
+        timestamp: 456,
+        landmarks: []
+      },
+      123
+    )
+
+    expect(result).toEqual({
+      subject: 'candidate',
+      timestamp: 456,
+      tensionLevel: 0,
+      smileLevel: 0,
+      expression: 'unknown'
+    })
+  })
+
   it('maps candidate landmarks to FaceAnalysisResult', async () => {
     const analyzer = createCandidateFaceAnalyzer({
       landmarker: createStubFaceLandmarker(smilingLandmarks()),
