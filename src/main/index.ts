@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { registerCaptureIpc } from './ipc/captureIpc'
 import { registerSttIpc } from './ipc/sttIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
@@ -6,6 +7,7 @@ let overlayWindow: BrowserWindow | null = null
 
 app.whenReady().then(() => {
   overlayWindow = createOverlayWindow()
+  registerCaptureIpc()
   registerSttIpc(() => overlayWindow)
 
   app.on('activate', () => {

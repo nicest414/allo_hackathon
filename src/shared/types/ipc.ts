@@ -1,11 +1,13 @@
 import type { ResponseJudgment, TranscriptSegment } from './analysis'
+import type { DesktopCaptureSource, DesktopCaptureSourcesRequest } from './capture'
 
 export const IPC_CHANNELS = {
   sttStart: 'stt:start',
   sttStop: 'stt:stop',
   sttAudioChunk: 'stt:audio-chunk',
   sttTranscript: 'stt:transcript',
-  llmJudgeResponse: 'llm:judge-response'
+  llmJudgeResponse: 'llm:judge-response',
+  captureDesktopSources: 'capture:desktop-sources'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -25,6 +27,10 @@ export type LlmJudgeResponseRequest = Pick<ResponseJudgment, 'question' | 'answe
 
 export type LlmJudgeResponseResult = Pick<ResponseJudgment, 'score' | 'reason'>
 
+export type CaptureDesktopSourcesRequest = DesktopCaptureSourcesRequest
+
+export type CaptureDesktopSourcesResult = DesktopCaptureSource[]
+
 export interface AlloPreloadApi {
   stt: {
     start: (request: SttStartRequest) => Promise<void>
@@ -34,5 +40,10 @@ export interface AlloPreloadApi {
   }
   llm: {
     judgeResponse: (request: LlmJudgeResponseRequest) => Promise<LlmJudgeResponseResult>
+  }
+  capture: {
+    listDesktopSources: (
+      request?: CaptureDesktopSourcesRequest
+    ) => Promise<CaptureDesktopSourcesResult>
   }
 }

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AlloPreloadApi,
+  CaptureDesktopSourcesResult,
   LlmJudgeResponseResult,
   SttTranscriptEvent
 } from '../shared/types/ipc'
@@ -35,6 +36,14 @@ const api: AlloPreloadApi = {
         IPC_CHANNELS.llmJudgeResponse,
         request
       ) as Promise<LlmJudgeResponseResult>
+    }
+  },
+  capture: {
+    listDesktopSources: async (request) => {
+      return ipcRenderer.invoke(
+        IPC_CHANNELS.captureDesktopSources,
+        request
+      ) as Promise<CaptureDesktopSourcesResult>
     }
   }
 }
