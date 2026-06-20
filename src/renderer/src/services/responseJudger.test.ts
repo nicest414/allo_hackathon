@@ -61,9 +61,22 @@ describe('createResponseJudger', () => {
     expect(judge).toHaveBeenCalledTimes(1)
 
     clock = 2600 // 前回(1000)から1600ms後 >= 1500ms
-    const outcome = await judger.judge(request)
+    // 別内容の質問/回答にしてthrottle解除を確認（同一だとdedupに当たるため）
+    const outcome = await judger.judge({ question: 'q2', answer: 'a2' })
     expect(outcome.status).toBe('ok')
     expect(judge).toHaveBeenCalledTimes(2)
+  })
+
+  it('直近に判定したのと同一の質問×回答はduplicateでスキップする', async () => {
+    const judge = vi.fn().mockResolvedValue({ score: 60, reason: 'ok' })
+    let clock = 1000
+    const judger = createResponseJudger({ judge, minIntervalMs: 1500, now: () => clock })
+
+    await judger.judge(request) // 1回目はOK
+    clock = 5000 // throttle窓は十分過ぎている
+
+    expect(await judger.judge(request)).toEqual({ status: 'skipped', reason: 'duplicate' })
+    expect(judge).toHaveBeenCalledTimes(1)
   })
 
   it('判定失敗時は中立スコアと理由を返す', async () => {
