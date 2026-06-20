@@ -15,16 +15,23 @@ export const IPC_CHANNELS = {
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
 
+/** STTの話者。就活生マイクと面接官ループバックを同時に動かすための識別子。 */
+export type SttSpeaker = 'candidate' | 'interviewer'
+
 export interface SttStartRequest {
   sampleRate: number
   language?: string
+  speaker: SttSpeaker
 }
 
 export interface SttAudioChunkRequest {
   audio: ArrayBuffer
+  speaker: SttSpeaker
 }
 
-export type SttTranscriptEvent = Pick<TranscriptSegment, 'text' | 'isFinal'>
+export type SttTranscriptEvent = Pick<TranscriptSegment, 'text' | 'isFinal'> & {
+  speaker: SttSpeaker
+}
 
 export type LlmJudgeResponseRequest = Pick<ResponseJudgment, 'question' | 'answer'>
 
@@ -41,7 +48,7 @@ export interface OverlaySetClickThroughRequest {
 export interface AlloPreloadApi {
   stt: {
     start: (request: SttStartRequest) => Promise<void>
-    stop: () => Promise<void>
+    stop: (speaker: SttSpeaker) => Promise<void>
     sendAudioChunk: (request: SttAudioChunkRequest) => Promise<void>
     onTranscript: (listener: (event: SttTranscriptEvent) => void) => () => void
   }

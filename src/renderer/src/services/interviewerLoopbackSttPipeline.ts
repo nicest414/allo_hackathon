@@ -1,6 +1,8 @@
 import type { CaptureErrorInfo } from '../../../shared/types/capture'
-import type { SttTranscriptEvent } from '../../../shared/types/ipc'
+import type { SttSpeaker, SttTranscriptEvent } from '../../../shared/types/ipc'
 import { getInterviewerLoopbackAudioStream } from '../capture/interviewerScreen'
+
+const SPEAKER: SttSpeaker = 'interviewer'
 import { toCaptureErrorInfo } from '../capture/types'
 import { encodePcm16 } from './candidateMicSttPipeline'
 import {
@@ -93,9 +95,14 @@ export function createInterviewerLoopbackSttPipeline(
         const sampleRate = audioContext.sampleRate
         await resumeAudioContext(audioContext)
         if (transcriptListener) {
-          unsubscribeTranscript = subscribeTranscript(transcriptListener)
+          // 自分の話者のtranscriptだけを呼び出し元へ渡す（就活生と同時購読するため）。
+          unsubscribeTranscript = subscribeTranscript((event) => {
+            if (event.speaker === SPEAKER) {
+              transcriptListener(event)
+            }
+          })
         }
-        await startSttService({ sampleRate, language })
+        await startSttService({ sampleRate, language, speaker: SPEAKER })
 
         const nextSession = createSession(loopbackResult.stream, audioContext, options)
         session = nextSession
@@ -181,7 +188,7 @@ export function createInterviewerLoopbackSttPipeline(
           return
         }
 
-        await sendAudioChunk({ audio })
+        await sendAudioChunk({ audio, speaker: SPEAKER })
       })
       .catch((error: unknown) => {
         dependencies.onError?.(error)
@@ -206,7 +213,7 @@ export function createInterviewerLoopbackSttPipeline(
     if (activeSession.audioContext.state !== 'closed') {
       await activeSession.audioContext.close()
     }
-    await stopSttService()
+    await stopSttService(SPEAKER)
   }
 
   async function cleanupFailedStart(
@@ -217,7 +224,7 @@ export function createInterviewerLoopbackSttPipeline(
     if (audioContext && audioContext.state !== 'closed') {
       await audioContext.close()
     }
-    await stopSttService().catch((error: unknown) => {
+    await stopSttService(SPEAKER).catch((error: unknown) => {
       dependencies.onError?.(error)
     })
   }

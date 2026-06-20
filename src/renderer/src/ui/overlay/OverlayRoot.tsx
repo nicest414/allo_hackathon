@@ -103,11 +103,7 @@ export function OverlayRoot(): ReactElement {
   }
 
   const startSttPipeline = async (): Promise<void> => {
-    if (interviewerLoopbackSttPipeline.getState().running) {
-      await interviewerLoopbackSttPipeline.stop()
-      refreshInterviewerSttPipelineState()
-    }
-
+    // speaker付きSTTになったため、就活生マイクと面接官ループバックは同時に動かせる。
     const result = await candidateMicSttPipeline.start({
       chunkMs: 250,
       sampleRate: 16000,
@@ -125,19 +121,14 @@ export function OverlayRoot(): ReactElement {
   }
 
   const handleInterviewerTranscript = (event: SttTranscriptEvent): void => {
-    setLatestTranscript(event.text)
-
+    // 就活生STTと同時に動くため、面接官は「面接官質問」行のみ更新する（STT:行は就活生用）。
     if (event.isFinal && event.text.trim() !== '') {
       setLatestInterviewerQuestion(event.text)
     }
   }
 
   const startInterviewerSttPipeline = async (): Promise<void> => {
-    if (candidateMicSttPipeline.getState().running) {
-      await candidateMicSttPipeline.stop()
-      refreshSttPipelineState()
-    }
-
+    // 就活生STTと同時に面接官STTを動かせる（speaker付きSTT）。
     const result = await interviewerLoopbackSttPipeline.start({
       chunkMs: 250,
       language: 'ja-JP',
