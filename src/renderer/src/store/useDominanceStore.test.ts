@@ -41,8 +41,20 @@ describe('useDominanceStore', () => {
   it('keeps portrait image URLs when dominance scores reset', () => {
     const store = useDominanceStore.getState()
     store.setCandidatePortraitImageUrl('portrait.png')
+    store.setInterviewerPortraitImageUrl('interviewer.png')
     store.reset()
 
     expect(useDominanceStore.getState().portraitImageUrls.candidate).toBe('portrait.png')
+    expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBe('interviewer.png')
+  })
+
+  it('stores the interviewer portrait image URL independently from the candidate one', () => {
+    const store = useDominanceStore.getState()
+    store.setCandidatePortraitImageUrl('candidate.png')
+    store.setInterviewerPortraitImageUrl('interviewer.png')
+
+    const { portraitImageUrls } = useDominanceStore.getState()
+    expect(portraitImageUrls.candidate).toBe('candidate.png')
+    expect(portraitImageUrls.interviewer).toBe('interviewer.png')
   })
 })

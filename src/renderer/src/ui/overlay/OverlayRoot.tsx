@@ -7,6 +7,10 @@ import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopbackSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
+import {
+  captureAndStoreCandidatePortrait,
+  captureAndStoreInterviewerPortrait
+} from '../../services/portraitCaptureService'
 import { detectFillers } from '../../domain/scoring/fillerDetector'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
@@ -23,6 +27,9 @@ export function OverlayRoot(): ReactElement {
   const scores = useDominanceStore((state) => state.scores)
   const candidatePortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.candidate
+  )
+  const interviewerPortraitImageUrl = useDominanceStore(
+    (state) => state.portraitImageUrls.interviewer
   )
   const setScores = useDominanceStore((state) => state.setScores)
   const setDominance = useDominanceStore((state) => state.setDominance)
@@ -186,12 +193,43 @@ export function OverlayRoot(): ReactElement {
     })
     refreshFaceLoopState()
     setFaceLoopMessage(result.ok ? '面接官画面解析中' : result.error.message)
+
+    if (result.ok) {
+      void captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId }).catch(
+        (error: unknown) => {
+          console.warn('Failed to initialize interviewer portrait image', error)
+        }
+      )
+    }
   }
 
   const stopInterviewerFaceLoop = async (): Promise<void> => {
     await faceAnalysisLoop.stopInterviewer()
     refreshFaceLoopState()
     setFaceLoopMessage('面接官画面解析を停止しました')
+  }
+
+  const retakeCandidatePortrait = async (): Promise<void> => {
+    setFaceLoopMessage('顔写真を再取得しています…')
+    const imageUrl = await captureAndStoreCandidatePortrait()
+    setFaceLoopMessage(
+      imageUrl ? '候補者の顔写真を再取得しました' : '候補者の顔写真の再取得に失敗しました'
+    )
+  }
+
+  const retakeInterviewerPortrait = async (): Promise<void> => {
+    if (!selectedScreenSourceId) {
+      setFaceLoopMessage('面接官の画面ソースが未選択です')
+      return
+    }
+
+    setFaceLoopMessage('面接官の顔写真を再取得しています…')
+    const imageUrl = await captureAndStoreInterviewerPortrait({
+      sourceId: selectedScreenSourceId
+    })
+    setFaceLoopMessage(
+      imageUrl ? '面接官の顔写真を再取得しました' : '面接官の顔写真の再取得に失敗しました'
+    )
   }
 
   const handleReset = async (): Promise<void> => {
@@ -212,7 +250,11 @@ export function OverlayRoot(): ReactElement {
 
   return (
     <div style={styles.root}>
-      <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
+      <DominanceClashBanner
+        value={dominance}
+        candidatePortraitSrc={candidatePortraitImageUrl}
+        interviewerPortraitSrc={interviewerPortraitImageUrl}
+      />
       <div style={styles.content}>
         <div style={styles.values}>
           優勢度: {dominance}（基礎: {baseDominance}）
@@ -231,6 +273,7 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startCandidateFaceLoop()}>カメラ開始</button>
           )}
+          <button onClick={() => void retakeCandidatePortrait()}>顔写真再取得（自分）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           <select
             value={selectedScreenSourceId}
@@ -248,6 +291,7 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startInterviewerFaceLoop()}>面接官開始</button>
           )}
+          <button onClick={() => void retakeInterviewerPortrait()}>顔写真再取得（相手）</button>
           {sttPipelineState.running ? (
             <button onClick={() => void stopSttPipeline()}>STT停止</button>
           ) : (
