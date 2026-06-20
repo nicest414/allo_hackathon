@@ -1,10 +1,12 @@
-import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
+import type { TranscriptSegment } from '../../../../shared/types/analysis'
 import { listInterviewerScreenSources } from '../../capture/interviewerScreen'
 import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
+import { detectFillers } from '../../domain/scoring/fillerDetector'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
@@ -21,6 +23,7 @@ export function OverlayRoot(): ReactElement {
   const candidatePortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.candidate
   )
+  const setScores = useDominanceStore((state) => state.setScores)
   const reset = useDominanceStore((state) => state.reset)
 
   // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
@@ -33,6 +36,9 @@ export function OverlayRoot(): ReactElement {
   const [sttPipelineState, setSttPipelineState] = useState(candidateMicSttPipeline.getState())
   const [sttMessage, setSttMessage] = useState('')
   const [latestTranscript, setLatestTranscript] = useState('')
+  // フィラー検出は確定(final)transcriptの蓄積に対して行うため、最新配列をrefで保持する。
+  const finalTranscriptsRef = useRef<TranscriptSegment[]>([])
+  const [fillerSummary, setFillerSummary] = useState('')
 
   useEffect(() => {
     return () => {
@@ -57,6 +63,24 @@ export function OverlayRoot(): ReactElement {
 
   const handleTranscript = (event: SttTranscriptEvent): void => {
     setLatestTranscript(event.text)
+
+    // 確定したtranscriptのみフィラー検出の対象に蓄積し、Storeのfillerスコアへ反映する。
+    // （優勢度への寄与は dominanceCalculator 側で 100-score に反転される）
+    if (!event.isFinal) {
+      return
+    }
+
+    finalTranscriptsRef.current = [
+      ...finalTranscriptsRef.current,
+      { timestamp: Date.now(), text: event.text, isFinal: true }
+    ]
+    const result = detectFillers(finalTranscriptsRef.current)
+    setScores({ filler: result.score })
+    setFillerSummary(
+      result.fillerCount > 0
+        ? `フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
+        : 'フィラー未検出'
+    )
   }
 
   const startSttPipeline = async (): Promise<void> => {
@@ -128,6 +152,8 @@ export function OverlayRoot(): ReactElement {
     refreshFaceLoopState()
     refreshSttPipelineState()
     setLatestTranscript('')
+    finalTranscriptsRef.current = []
+    setFillerSummary('')
     reset()
   }
 
@@ -179,6 +205,7 @@ export function OverlayRoot(): ReactElement {
         {latestTranscript ? (
           <div style={styles.transcript}>STT: {latestTranscript}</div>
         ) : null}
+        {fillerSummary ? <div style={styles.sttMessage}>{fillerSummary}</div> : null}
         <ul style={styles.scores}>
           {Object.entries(scores).map(([key, value]) => (
             <li key={key}>
