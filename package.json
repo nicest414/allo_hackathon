@@ -9,6 +9,7 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "electron": "^42.4.1",
     "electron-vite": "^5.0.0",
     "typescript": "^6.0.3",
-    "vite": "^7.3.5"
+    "vite": "^7.3.5",
+    "vitest": "^4.1.9"
   }
 }
