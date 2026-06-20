@@ -115,21 +115,23 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
         <BoltGroup paths={RIGHT_BOLTS} />
         <div className="clash-banner__sweep" />
       </div>
-      <img
-        className="clash-banner__portrait clash-banner__portrait--left"
-        src={leftPortrait}
-        alt=""
-        aria-hidden="true"
-      />
-      <img
-        className="clash-banner__portrait clash-banner__portrait--right"
-        src={rightPortrait}
-        alt=""
-        aria-hidden="true"
-      />
+      <div className="clash-banner__portrait-mask clash-banner__portrait-mask--left">
+        <img
+          className="clash-banner__portrait clash-banner__portrait--left"
+          src={leftPortrait}
+          alt=""
+          aria-hidden="true"
+        />
+      </div>
+      <div className="clash-banner__portrait-mask clash-banner__portrait-mask--right">
+        <img
+          className="clash-banner__portrait clash-banner__portrait--right"
+          src={rightPortrait}
+          alt=""
+          aria-hidden="true"
+        />
+      </div>
       <div className="clash-banner__clash">
-        <div className="clash-banner__burst" />
-        <div className="clash-banner__flash" />
         <div className="clash-banner__lightning-mask">
           <video
             className="clash-banner__lightning"
@@ -142,7 +144,6 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
             aria-hidden="true"
           />
         </div>
-        <div className="clash-banner__value">{clamped}</div>
       </div>
       <span className="clash-banner__label clash-banner__label--left">You</span>
       <span className="clash-banner__label clash-banner__label--right">相手</span>
