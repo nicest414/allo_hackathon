@@ -1,0 +1,48 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { useDominanceStore } from './useDominanceStore'
+
+describe('useDominanceStore', () => {
+  beforeEach(() => {
+    useDominanceStore.getState().reset()
+  })
+
+  it('recalculates base and corrected dominance when realtime scores change', () => {
+    useDominanceStore.getState().setScores({
+      candidateFace: 100,
+      interviewerFace: 100,
+      voice: 0,
+      filler: 0
+    })
+
+    const state = useDominanceStore.getState()
+    expect(state.baseDominance).toBe(100)
+    expect(state.dominance).toBe(100)
+  })
+
+  it('applies response correction to the displayed dominance', () => {
+    useDominanceStore.getState().setScores({ response: 100 })
+
+    const state = useDominanceStore.getState()
+    expect(state.baseDominance).toBe(50)
+    expect(state.dominance).toBe(70)
+    expect(state.scores.response).toBe(100)
+  })
+
+  it('accumulates repeated response scores with EMA before applying correction', () => {
+    const store = useDominanceStore.getState()
+    store.setScores({ response: 100 })
+    store.setScores({ response: 0 })
+
+    const state = useDominanceStore.getState()
+    expect(state.scores.response).toBe(40)
+    expect(state.dominance).toBe(46)
+  })
+
+  it('keeps portrait image URLs when dominance scores reset', () => {
+    const store = useDominanceStore.getState()
+    store.setCandidatePortraitImageUrl('portrait.png')
+    store.reset()
+
+    expect(useDominanceStore.getState().portraitImageUrls.candidate).toBe('portrait.png')
+  })
+})

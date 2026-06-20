@@ -1,72 +1,25 @@
-import type {
-  DominanceScoreBreakdown,
-  FaceScore,
-  FillerDetectionResult,
-  VoiceScore
-} from '../../../shared/types/analysis'
-import { calculateBaseDominance, calculateDominance } from '../domain/scoring/dominanceCalculator'
+import type { FaceScore, FillerDetectionResult, VoiceScore } from '../../../shared/types/analysis'
+import type { DominanceScores } from '../store/useDominanceStore'
 
 /**
- * 各分析結果の最新値を集約し、優勢度を再計算するオーケストレーション（pure / Reactに非依存）。
+ * 各分析結果の最新値を集約し、優勢度Storeへ流すオーケストレーション（pure / Reactに非依存）。
  *
- * - 欠損している入力は中立扱いにする（顔/声/フィラーは中立値50、返答は補正なし）。
- * - 分析ごとに更新周期が異なるため、最新値だけを保持し、throttleで再計算頻度を抑える。
+ * 優勢度の再計算（基礎優勢度・LLM補正・返答スコアのEMA）はStore側(setScores)が担う。
+ * このアグリゲーターは「型付き分析結果 → Storeが扱う数値スコア」への変換と、
+ * 分析ごとに異なる更新周期をまとめる throttle（再計算頻度の制御）だけを担当する。
+ *
+ * 注: voice/fillerは値が大きいほど焦り・フィラーが多い「生スコア」をそのまま渡す
+ * （優勢度への反転はStore→dominanceCalculator側で行う）。
  */
 
-export interface DominanceSignals {
-  candidateFace?: FaceScore
-  interviewerFace?: FaceScore
-  voice?: VoiceScore
-  filler?: FillerDetectionResult
-  response?: number
-}
+export type DominanceScoreUpdate = Partial<DominanceScores>
 
-export interface ComposedDominance {
-  timestamp: number
-  /** リアルタイム4項目のみの基礎優勢度 */
-  baseDominance: number
-  /** LLM補正を適用した最終優勢度 */
-  dominance: number
-  breakdown: DominanceScoreBreakdown
-}
-
-const NEUTRAL_FACE_VALUE = 50
-const NEUTRAL_VOICE: VoiceScore = { value: 50 }
-const NEUTRAL_FILLER: FillerDetectionResult = { matchedFillers: [], fillerCount: 0, score: 50 }
 const DEFAULT_MIN_INTERVAL_MS = 100
 
-/**
- * 欠損入力を中立で埋めて優勢度を算出する。基礎優勢度と補正後優勢度の両方を返す。
- */
-export function composeDominance(
-  signals: DominanceSignals,
-  timestamp: number = Date.now()
-): ComposedDominance {
-  const filled = {
-    timestamp,
-    candidateFace: signals.candidateFace ?? { subject: 'candidate' as const, value: NEUTRAL_FACE_VALUE },
-    interviewerFace:
-      signals.interviewerFace ?? { subject: 'interviewer' as const, value: NEUTRAL_FACE_VALUE },
-    voice: signals.voice ?? NEUTRAL_VOICE,
-    filler: signals.filler ?? NEUTRAL_FILLER,
-    response: signals.response
-  }
-
-  const base = calculateBaseDominance(filled)
-  const full = calculateDominance(filled)
-
-  return {
-    timestamp,
-    baseDominance: base.value,
-    dominance: full.value,
-    breakdown: full.breakdown
-  }
-}
-
 export interface DominanceAggregatorOptions {
-  /** 再計算結果の通知先（Store更新など）。 */
-  onChange: (result: ComposedDominance) => void
-  /** 連続更新時の最小再計算間隔(ms)。 */
+  /** まとめた更新の反映先（通常は Store の setScores）。 */
+  onFlush: (update: DominanceScoreUpdate) => void
+  /** 連続更新時の最小反映間隔(ms)。 */
   minIntervalMs?: number
   /** 現在時刻取得（テスト用）。 */
   now?: () => number
@@ -93,49 +46,56 @@ export function createDominanceAggregator(options: DominanceAggregatorOptions): 
   const schedule = options.schedule ?? ((cb, ms) => setTimeout(cb, ms))
   const cancel = options.cancel ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>))
 
-  let signals: DominanceSignals = {}
-  let lastEmitAt = Number.NEGATIVE_INFINITY
+  let pending: DominanceScoreUpdate = {}
+  let lastFlushAt = Number.NEGATIVE_INFINITY
   let timer: unknown
 
-  function emit(): void {
+  function flush(): void {
     if (timer !== undefined) {
       cancel(timer)
       timer = undefined
     }
-    lastEmitAt = now()
-    options.onChange(composeDominance(signals, lastEmitAt))
+
+    if (Object.keys(pending).length === 0) {
+      return
+    }
+
+    const update = pending
+    pending = {}
+    lastFlushAt = now()
+    options.onFlush(update)
   }
 
-  // leading + trailing throttle: 間隔が空いていれば即時、空いていなければ末尾で1回だけ反映
-  function requestEmit(): void {
-    const elapsed = now() - lastEmitAt
+  // leading + trailing throttle: 間隔が空いていれば即時、空いていなければ末尾で1回だけまとめて反映
+  function requestFlush(): void {
+    const elapsed = now() - lastFlushAt
 
     if (elapsed >= minIntervalMs) {
-      emit()
+      flush()
     } else if (timer === undefined) {
-      timer = schedule(emit, minIntervalMs - elapsed)
+      timer = schedule(flush, minIntervalMs - elapsed)
     }
   }
 
-  function update(partial: DominanceSignals): void {
-    signals = { ...signals, ...partial }
-    requestEmit()
+  function merge(partial: DominanceScoreUpdate): void {
+    pending = { ...pending, ...partial }
+    requestFlush()
   }
 
   return {
-    reportCandidateFace: (score) => update({ candidateFace: score }),
-    reportInterviewerFace: (score) => update({ interviewerFace: score }),
-    reportVoice: (score) => update({ voice: score }),
-    reportFiller: (result) => update({ filler: result }),
-    reportResponse: (score) => update({ response: score }),
-    flush: () => emit(),
+    reportCandidateFace: (score) => merge({ candidateFace: score.value }),
+    reportInterviewerFace: (score) => merge({ interviewerFace: score.value }),
+    reportVoice: (score) => merge({ voice: score.value }),
+    reportFiller: (result) => merge({ filler: result.score }),
+    reportResponse: (score) => merge({ response: score }),
+    flush,
     reset: () => {
-      signals = {}
+      pending = {}
       if (timer !== undefined) {
         cancel(timer)
         timer = undefined
       }
-      lastEmitAt = Number.NEGATIVE_INFINITY
+      lastFlushAt = Number.NEGATIVE_INFINITY
     }
   }
 }

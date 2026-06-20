@@ -40,6 +40,33 @@ mise run build      # ビルド
 
 > 音声ループバック取得など一部機能は macOS 前提（ScreenCaptureKit）。詳細は下記「技術選定」を参照。
 
+### LLM（Gemini判定）のデバッグ
+
+`src/main/llm/geminiJudgeClient.ts` は Electron 非依存なので、アプリを起動せず素の Node で判定を試せる。
+
+```bash
+# 質問と回答を渡して判定（モードは自動判定: 下記参照）
+mise run judge -- "志望動機は？" "御社の理念に共感し、前職での具体的な実績があります"
+
+mise run judge -- "質問" "回答" -v       # 送信プロンプトと生JSON応答も表示
+mise run judge -- "質問" "回答" --debug   # status/レイテンシ等を stderr に出力
+mise run judge -- --file scripts/fixtures/cases.json   # {question, answer} 配列をバッチ実行
+```
+
+判定モードは環境変数で切り替わる（`judgeResponse` のロジック）：
+
+| 条件 | モード | 用途 |
+|---|---|---|
+| `LLM_FAKE=1` | モック | 実APIを呼ばず、入力に応じた**決定的**スコア。キー無し/オフライン/CI/UI結合確認 |
+| `GEMINI_API_KEY` 設定済み | 実API | 本物の Gemini Flash 判定 |
+| どちらも無し | スタブ | 中立50点（フォールバック） |
+
+- `LLM_DEBUG=1` で Gemini 呼び出しの status・レイテンシ・生応答テキストを stderr に出力（**API キーは出力しない**）。
+- エラー経路（HTTPエラー/タイムアウト/不正JSON）は `geminiJudgeClient.test.ts` が fetch をモックして再生する（実APIキー不要）。
+- main プロセスにブレークポイントを張りたい場合は `npx electron-vite dev --inspect` で起動し、`chrome://inspect` や VS Code からアタッチする。
+APIキー（`GEMINI_API_KEY` / `DEEPGRAM_API_KEY`）の取得手順・無料枠・`STT_PROVIDER` ごとの
+必須キー・安全な共有方法は **[docs/development-setup.md](docs/development-setup.md)** を参照。
+
 ## 入力
 
 | 項目 | 取得元 | 対象 |
@@ -65,6 +92,8 @@ mise run build      # ビルド
 - 優勢度が振り切れた時にカットイン演出を入れる
 
 ## 技術選定
+
+アーキテクチャの妥当性、採用理由、代替案、今後の判断基準は [docs/architecture.md](docs/architecture.md) にまとめている。
 
 ### シェル：Electron
 

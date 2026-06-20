@@ -1,46 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import {
-  type ComposedDominance,
-  composeDominance,
-  createDominanceAggregator
-} from './dominanceAggregator'
-
-describe('composeDominance', () => {
-  it('全入力が欠損なら基礎50・補正なしの中立になる', () => {
-    const result = composeDominance({}, 1)
-
-    expect(result.baseDominance).toBe(50)
-    expect(result.dominance).toBe(50)
-    expect(result.breakdown).toEqual({
-      candidateFace: 50,
-      interviewerFace: 50,
-      voice: 50,
-      filler: 50,
-      response: 50
-    })
-  })
-
-  it('返答スコアは基礎優勢度への補正として効く', () => {
-    expect(composeDominance({ response: 100 }, 1).dominance).toBe(70) // 50 + (100-50)*0.4
-    expect(composeDominance({ response: 0 }, 1).dominance).toBe(30)
-    expect(composeDominance({ response: 100 }, 1).baseDominance).toBe(50) // 基礎は4項目のみ
-  })
-
-  it('リアルタイム項目の欠損は中立、与えた項目だけ反映する', () => {
-    const result = composeDominance({ candidateFace: { subject: 'candidate', value: 100 } }, 1)
-    // candidateFace重み0.4 → 100*0.4 + 50*0.6 = 70
-    expect(result.baseDominance).toBeCloseTo(70)
-  })
-})
+import { type DominanceScoreUpdate, createDominanceAggregator } from './dominanceAggregator'
 
 describe('createDominanceAggregator', () => {
   function setup() {
-    const changes: ComposedDominance[] = []
+    const flushes: DominanceScoreUpdate[] = []
     const scheduled: Array<{ cb: () => void; ms: number }> = []
     let clock = 1000
 
     const aggregator = createDominanceAggregator({
-      onChange: (result) => changes.push(result),
+      onFlush: (update) => flushes.push(update),
       minIntervalMs: 100,
       now: () => clock,
       schedule: (cb, ms) => {
@@ -52,7 +20,7 @@ describe('createDominanceAggregator', () => {
 
     return {
       aggregator,
-      changes,
+      flushes,
       scheduled,
       setClock: (value: number) => {
         clock = value
@@ -60,42 +28,58 @@ describe('createDominanceAggregator', () => {
     }
   }
 
-  it('間隔が空いていれば即時に再計算を通知する（leading）', () => {
-    const { aggregator, changes } = setup()
+  it('型付き分析結果をStoreが扱う数値スコアへ変換して即時反映する（leading）', () => {
+    const { aggregator, flushes } = setup()
 
-    aggregator.reportResponse(100)
+    aggregator.reportCandidateFace({ subject: 'candidate', value: 80 })
 
-    expect(changes).toHaveLength(1)
-    expect(changes[0].dominance).toBe(70)
+    expect(flushes).toEqual([{ candidateFace: 80 }])
   })
 
-  it('最小間隔内の連続reportは末尾で1回だけ反映する（trailing）', () => {
-    const { aggregator, changes, scheduled, setClock } = setup()
+  it('voice/fillerは生スコアをそのまま渡す（反転はStore側）', () => {
+    const { aggregator, flushes } = setup()
 
-    aggregator.reportResponse(100) // leading emit @1000
+    aggregator.reportVoice({ value: 70 })
+
+    expect(flushes).toEqual([{ voice: 70 }])
+  })
+
+  it('最小間隔内の連続reportは1回にまとめて末尾で反映する（trailing）', () => {
+    const { aggregator, flushes, scheduled, setClock } = setup()
+
+    aggregator.reportCandidateFace({ subject: 'candidate', value: 80 }) // leading flush @1000
     setClock(1050)
-    aggregator.reportResponse(0) // 50ms後 → 即時emitせずschedule
-    aggregator.reportResponse(100) // さらに更新しても二重scheduleしない
+    aggregator.reportVoice({ value: 70 }) // 50ms後 → scheduleのみ
+    aggregator.reportResponse(90) // 同じ保留にマージ
 
-    expect(changes).toHaveLength(1)
+    expect(flushes).toHaveLength(1)
     expect(scheduled).toHaveLength(1)
 
     setClock(1100)
     scheduled[0].cb() // trailing flush
 
-    expect(changes).toHaveLength(2)
-    expect(changes[1].dominance).toBe(70) // 最後にreportした値が反映される
+    expect(flushes).toHaveLength(2)
+    expect(flushes[1]).toEqual({ voice: 70, response: 90 })
   })
 
-  it('resetで集約状態と間隔を初期化する', () => {
-    const { aggregator, changes, setClock } = setup()
+  it('保留が無ければflushは何もしない', () => {
+    const { aggregator, flushes } = setup()
 
-    aggregator.reportResponse(0) // emit @1000
+    aggregator.flush()
+
+    expect(flushes).toHaveLength(0)
+  })
+
+  it('resetで保留と間隔を初期化する', () => {
+    const { aggregator, flushes, setClock } = setup()
+
+    aggregator.reportResponse(40) // flush @1000
     setClock(1050)
-    aggregator.reset()
-    aggregator.reportResponse(100) // resetでlastEmitが戻るので即時emit
+    aggregator.reportResponse(90) // scheduleされ保留
+    aggregator.reset() // 保留破棄・間隔リセット
 
-    expect(changes).toHaveLength(2)
-    expect(changes[1].dominance).toBe(70)
+    aggregator.reportResponse(60) // resetでlastFlushが戻るので即時flush
+
+    expect(flushes).toEqual([{ response: 40 }, { response: 60 }])
   })
 })

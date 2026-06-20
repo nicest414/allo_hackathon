@@ -2,14 +2,20 @@ import { useState, type CSSProperties, type ReactElement } from 'react'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
+import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
 
 const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
 export function OverlayRoot(): ReactElement {
+  useInitialCandidatePortraitImage()
+
   const baseDominance = useDominanceStore((state) => state.baseDominance)
   const dominance = useDominanceStore((state) => state.dominance)
   const scores = useDominanceStore((state) => state.scores)
+  const candidatePortraitImageUrl = useDominanceStore(
+    (state) => state.portraitImageUrls.candidate
+  )
   const reset = useDominanceStore((state) => state.reset)
 
   // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
@@ -30,7 +36,7 @@ export function OverlayRoot(): ReactElement {
 
   return (
     <div style={styles.root}>
-      <DominanceClashBanner value={dominance} />
+      <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
       <div style={styles.content}>
         <div style={styles.values}>
           優勢度: {dominance}（基礎: {baseDominance}）

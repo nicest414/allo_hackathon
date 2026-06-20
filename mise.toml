@@ -30,3 +30,7 @@ run = "npm test"
 [tasks.typecheck]
 description = "型チェック（node 用 / web 用）"
 run = "npm run typecheck"
+
+[tasks.judge]
+description = 'Gemini判定をElectron無しで実行（デバッグ用）。例: mise run judge -- "質問" "回答" -v'
+run = "tsx scripts/judge.ts"
