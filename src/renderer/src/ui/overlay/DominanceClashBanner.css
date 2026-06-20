@@ -246,6 +246,18 @@
     drop-shadow(0 0 32px rgba(30, 193, 255, 0.35));
 }
 
+/*
+ * 実写キャプチャ(capturePortraitFrame)は常に正方形(256x256)・顔が中央付近を
+ * 占める構図で生成される。static illustration(left.png, 3840x2160)向けに隅寄りで
+ * チューニングされた上のobject-position/mask-imageをそのまま使うと、顔がマスクの
+ * 透明域(フェードアウト側)に落ちて見えなくなるため、中心基準に引き直す。
+ */
+.clash-banner__portrait--left.clash-banner__portrait--captured {
+  object-position: center center;
+  mask-image: radial-gradient(75% 85% at 60% 55%, #000 65%, rgba(0, 0, 0, 0.55) 82%, transparent 100%);
+  -webkit-mask-image: radial-gradient(75% 85% at 60% 55%, #000 65%, rgba(0, 0, 0, 0.55) 82%, transparent 100%);
+}
+
 .clash-banner__portrait--right {
   object-position: center 22%;
   /* 中央(左辺)を斜めにそぎ落として前のめりな勢いを出す */
@@ -256,6 +268,13 @@
     drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6))
     drop-shadow(0 0 18px rgba(255, 77, 244, 0.55))
     drop-shadow(0 0 32px rgba(255, 21, 196, 0.35));
+}
+
+/* 実写キャプチャ用の上書き。left側と同じ理由でmask-imageの中心を中央寄りに引き直す。 */
+.clash-banner__portrait--right.clash-banner__portrait--captured {
+  object-position: center center;
+  mask-image: radial-gradient(75% 85% at 40% 55%, #000 65%, rgba(0, 0, 0, 0.55) 82%, transparent 100%);
+  -webkit-mask-image: radial-gradient(75% 85% at 40% 55%, #000 65%, rgba(0, 0, 0, 0.55) 82%, transparent 100%);
 }
 
 .clash-banner__clash {
