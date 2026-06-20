@@ -1,5 +1,6 @@
 import type { CaptureResult } from './types'
 import { getCandidateCameraStream } from './candidateCamera'
+import type { FaceLandmarker, NormalizedFaceLandmark } from '../analysis/face/faceLandmarker'
 
 export interface PortraitFrameOptions {
   width?: number
@@ -7,14 +8,20 @@ export interface PortraitFrameOptions {
   mimeType?: 'image/png' | 'image/jpeg' | 'image/webp'
   quality?: number
   timeoutMs?: number
+  landmarker?: FaceLandmarker
+  faceCropPaddingRatio?: number
+  faceDetectionTimeoutMs?: number
 }
 
 const defaultPortraitFrameOptions = {
   width: 256,
   height: 256,
   mimeType: 'image/png',
-  timeoutMs: 3000
-} satisfies Required<Pick<PortraitFrameOptions, 'width' | 'height' | 'mimeType' | 'timeoutMs'>>
+  timeoutMs: 3000,
+  faceDetectionTimeoutMs: 1500
+} satisfies Required<
+  Pick<PortraitFrameOptions, 'width' | 'height' | 'mimeType' | 'timeoutMs' | 'faceDetectionTimeoutMs'>
+>
 
 export async function captureCandidatePortraitImage(
   options: PortraitFrameOptions = {}
@@ -72,7 +79,7 @@ export async function capturePortraitFrame(
       throw new Error('顔画像の描画コンテキストを作成できませんでした')
     }
 
-    drawCoverFrame(context, video, width, height)
+    await drawPortraitFrame(context, video, width, height, options)
     return canvas.toDataURL(mimeType, options.quality)
   } finally {
     video.pause()
@@ -112,6 +119,133 @@ function waitForVideoFrame(video: HTMLVideoElement, timeoutMs: number): Promise<
   })
 }
 
+async function drawPortraitFrame(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  width: number,
+  height: number,
+  options: PortraitFrameOptions
+): Promise<void> {
+  if (options.landmarker !== undefined) {
+    const cropBox = await waitForFaceCropBox(video, options).catch((error: unknown) => {
+      console.warn('Failed to detect face crop box', error)
+      return null
+    })
+
+    if (cropBox !== null) {
+      context.drawImage(
+        video,
+        cropBox.x,
+        cropBox.y,
+        cropBox.width,
+        cropBox.height,
+        0,
+        0,
+        width,
+        height
+      )
+      return
+    }
+  }
+
+  drawCoverFrame(context, video, width, height)
+}
+
+async function waitForFaceCropBox(
+  video: HTMLVideoElement,
+  options: PortraitFrameOptions
+): Promise<FaceCropBox | null> {
+  const landmarker = options.landmarker
+
+  if (landmarker === undefined) {
+    return null
+  }
+
+  const startedAt = Date.now()
+  const timeoutMs =
+    options.faceDetectionTimeoutMs ?? defaultPortraitFrameOptions.faceDetectionTimeoutMs
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const result = await landmarker.detect(video)
+    const cropBox = calculateFaceCropBox(
+      result?.landmarks ?? [],
+      video.videoWidth,
+      video.videoHeight,
+      options.faceCropPaddingRatio
+    )
+
+    if (cropBox !== null) {
+      return cropBox
+    }
+
+    await waitForNextFrame()
+  }
+
+  return null
+}
+
+export interface FaceCropBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export function calculateFaceCropBox(
+  landmarks: NormalizedFaceLandmark[],
+  sourceWidth: number,
+  sourceHeight: number,
+  paddingRatio = 0.35
+): FaceCropBox | null {
+  if (landmarks.length === 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+    return null
+  }
+
+  const bounds = landmarks.reduce(
+    (acc, landmark) => ({
+      minX: Math.min(acc.minX, landmark.x),
+      minY: Math.min(acc.minY, landmark.y),
+      maxX: Math.max(acc.maxX, landmark.x),
+      maxY: Math.max(acc.maxY, landmark.y)
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY
+    }
+  )
+
+  if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY)) {
+    return null
+  }
+
+  const minX = clamp01(bounds.minX)
+  const minY = clamp01(bounds.minY)
+  const maxX = clamp01(bounds.maxX)
+  const maxY = clamp01(bounds.maxY)
+  const faceWidth = (maxX - minX) * sourceWidth
+  const faceHeight = (maxY - minY) * sourceHeight
+
+  if (faceWidth <= 0 || faceHeight <= 0) {
+    return null
+  }
+
+  const centerX = ((minX + maxX) / 2) * sourceWidth
+  const centerY = ((minY + maxY) / 2) * sourceHeight
+  const paddedSize = Math.max(faceWidth, faceHeight) * (1 + Math.max(0, paddingRatio) * 2)
+  const size = Math.min(paddedSize, sourceWidth, sourceHeight)
+  const x = clamp(centerX - size / 2, 0, sourceWidth - size)
+  const y = clamp(centerY - size / 2, 0, sourceHeight - size)
+
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(size),
+    height: Math.round(size)
+  }
+}
+
 function drawCoverFrame(
   context: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -140,4 +274,18 @@ function stopMediaStream(stream: MediaStream): void {
   for (const track of stream.getTracks()) {
     track.stop()
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function clamp01(value: number): number {
+  return clamp(value, 0, 1)
+}
+
+function waitForNextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
 }
