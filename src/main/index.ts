@@ -8,6 +8,11 @@ import { createOverlayWindow } from './windows/createOverlayWindow'
 
 const { app, BrowserWindow } = electron
 
+// transparent:trueなBrowserWindow上でアルファ付き動画を再生すると、GPUの動画デコード経路が
+// ウィンドウの透過と正しく合成されずわずかに黒みがかる(Chromiumの既知の制約)。
+// ソフトウェアデコードに切り替えることで透過動画(稲妻演出)を正しく合成させる。
+app.commandLine.appendSwitch('disable-accelerated-video-decode')
+
 let overlayWindow: Electron.BrowserWindow | null = null
 
 // electron-audio-loopback導入後はinitMain()がreadyイベント前の呼び出しを要求するため、

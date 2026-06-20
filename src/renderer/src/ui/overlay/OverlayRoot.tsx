@@ -24,6 +24,7 @@ export function OverlayRoot(): ReactElement {
     (state) => state.portraitImageUrls.candidate
   )
   const setScores = useDominanceStore((state) => state.setScores)
+  const setDominance = useDominanceStore((state) => state.setDominance)
   const reset = useDominanceStore((state) => state.reset)
 
   // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
@@ -169,6 +170,8 @@ export function OverlayRoot(): ReactElement {
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
+          <button onClick={() => setDominance(dominance - 10)}>You -10</button>
+          <button onClick={() => setDominance(dominance + 10)}>相手 +10</button>
           <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
           <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
           {faceLoopState.candidate ? (
