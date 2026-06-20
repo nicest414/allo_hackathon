@@ -1,10 +1,13 @@
-import { app, BrowserWindow } from 'electron'
+import electron from 'electron'
 import { enableLoopbackAudio } from './audio/enableLoopbackAudio'
 import { registerCaptureIpc } from './ipc/captureIpc'
 import { registerSttIpc } from './ipc/sttIpc'
+import { registerWindowIpc } from './ipc/windowIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
-let overlayWindow: BrowserWindow | null = null
+const { app, BrowserWindow } = electron
+
+let overlayWindow: Electron.BrowserWindow | null = null
 
 // electron-audio-loopback導入後はinitMain()がreadyイベント前の呼び出しを要求するため、
 // app.whenReady()より前のトップレベルで呼び出す。
@@ -18,6 +21,7 @@ app.whenReady().then(() => {
   overlayWindow = createOverlayWindow()
   registerCaptureIpc()
   registerSttIpc(() => overlayWindow)
+  registerWindowIpc(() => overlayWindow)
 
   app.on('activate', () => {
     // macOS: Dockアイコンクリック時にウィンドウが無ければ再生成する

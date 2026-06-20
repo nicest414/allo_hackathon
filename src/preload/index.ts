@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import electron from 'electron'
 import type {
   AlloPreloadApi,
   CaptureDesktopSourcesResult,
@@ -6,6 +6,8 @@ import type {
   SttTranscriptEvent
 } from '../shared/types/ipc'
 import { IPC_CHANNELS } from '../shared/types/ipc'
+
+const { contextBridge, ipcRenderer } = electron
 
 const api: AlloPreloadApi = {
   stt: {
@@ -44,6 +46,11 @@ const api: AlloPreloadApi = {
         IPC_CHANNELS.captureDesktopSources,
         request
       ) as Promise<CaptureDesktopSourcesResult>
+    }
+  },
+  overlay: {
+    setClickThrough: async (request) => {
+      await ipcRenderer.invoke(IPC_CHANNELS.overlaySetClickThrough, request)
     }
   }
 }
