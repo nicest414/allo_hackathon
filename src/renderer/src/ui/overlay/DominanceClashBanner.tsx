@@ -41,10 +41,12 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
   return (
     <div className="clash-banner" role="img" aria-label={`優勢度 ${clamped}`}>
       <div className="clash-banner__zone clash-banner__zone--left" style={{ width: `${leftWidth}%` }}>
+        <div className="clash-banner__rays" aria-hidden="true" />
         <BoltGroup paths={LEFT_BOLTS} />
         <div className="clash-banner__sweep" />
       </div>
       <div className="clash-banner__zone clash-banner__zone--right" style={{ width: `${rightWidth}%` }}>
+        <div className="clash-banner__rays" aria-hidden="true" />
         <BoltGroup paths={RIGHT_BOLTS} />
         <div className="clash-banner__sweep" />
       </div>
