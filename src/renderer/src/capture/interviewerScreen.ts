@@ -1,6 +1,7 @@
 import type {
   CaptureDesktopSourcesRequest,
-  CaptureDesktopSourcesResult
+  CaptureDesktopSourcesResult,
+  ScreenAccessStatus
 } from '../../../shared/types/ipc'
 import type { CaptureResult } from './types'
 import { toCaptureErrorInfo } from './types'
@@ -26,6 +27,14 @@ export function listInterviewerScreenSources(
   request?: CaptureDesktopSourcesRequest
 ): Promise<CaptureDesktopSourcesResult> {
   return window.allo.capture.listDesktopSources(request)
+}
+
+export function getScreenAccessStatus(): Promise<ScreenAccessStatus> {
+  return window.allo.capture.getScreenAccessStatus()
+}
+
+export function openScreenSettings(): Promise<void> {
+  return window.allo.capture.openScreenSettings()
 }
 
 export async function getInterviewerScreenStream(
