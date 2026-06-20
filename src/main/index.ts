@@ -1,9 +1,18 @@
 import { app, BrowserWindow } from 'electron'
+import { enableLoopbackAudio } from './audio/enableLoopbackAudio'
 import { registerCaptureIpc } from './ipc/captureIpc'
 import { registerSttIpc } from './ipc/sttIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
 let overlayWindow: BrowserWindow | null = null
+
+// electron-audio-loopback導入後はinitMain()がreadyイベント前の呼び出しを要求するため、
+// app.whenReady()より前のトップレベルで呼び出す。
+void enableLoopbackAudio().then((result) => {
+  if (result.status !== 'enabled') {
+    console.warn(`[audio] loopback ${result.status}: ${result.message}`)
+  }
+})
 
 app.whenReady().then(() => {
   overlayWindow = createOverlayWindow()
