@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { enableLoopbackAudio } from './audio/enableLoopbackAudio'
+import { registerCaptureIpc } from './ipc/captureIpc'
 import { registerSttIpc } from './ipc/sttIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
@@ -15,6 +16,7 @@ void enableLoopbackAudio().then((result) => {
 
 app.whenReady().then(() => {
   overlayWindow = createOverlayWindow()
+  registerCaptureIpc()
   registerSttIpc(() => overlayWindow)
 
   app.on('activate', () => {
