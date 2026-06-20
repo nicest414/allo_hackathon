@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetMainEnvForTest } from '../env'
 import { judgeResponse, parseJudgmentResult } from './geminiJudgeClient'
@@ -21,9 +24,17 @@ describe('parseJudgmentResult', () => {
 
 describe('judgeResponse', () => {
   const originalKey = process.env.GEMINI_API_KEY
+  let originalCwd: string
+  let tempDir: string
 
   beforeEach(() => {
     delete process.env.GEMINI_API_KEY
+
+    // getMainEnv() はprocess.cwd()/.envを再読み込みするため、開発者のリポジトリに実キーが
+    // 書かれた.envがあっても拾わないよう、.envの無い一時ディレクトリへ退避してテストする。
+    originalCwd = process.cwd()
+    tempDir = mkdtempSync(join(tmpdir(), 'allo-gemini-judge-test-'))
+    process.chdir(tempDir)
     resetMainEnvForTest()
   })
 
@@ -33,6 +44,8 @@ describe('judgeResponse', () => {
     } else {
       process.env.GEMINI_API_KEY = originalKey
     }
+    process.chdir(originalCwd)
+    rmSync(tempDir, { force: true, recursive: true })
     resetMainEnvForTest()
   })
 
