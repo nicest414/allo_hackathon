@@ -1,9 +1,11 @@
 import { app, BrowserWindow } from 'electron'
+import { registerLlmIpc } from './ipc/llmIpc'
 import { createOverlayWindow } from './windows/createOverlayWindow'
 
 let overlayWindow: BrowserWindow | null = null
 
 app.whenReady().then(() => {
+  registerLlmIpc()
   overlayWindow = createOverlayWindow()
 
   app.on('activate', () => {
