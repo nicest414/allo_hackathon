@@ -11,7 +11,10 @@ import type {
   NormalizedFaceLandmark
 } from './faceLandmarker'
 
-const defaultWasmBaseUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
+// CSP(script-src 'self')のためCDNから読み込めない。electron.vite.config.tsがビルド/dev起動時に
+// node_modulesからsrc/renderer/public/mediapipe/wasmへコピーした同一オリジンのファイルを使う。
+// BASE_URLはdevで'/'、本番ビルドでは'./'(electron-viteがfile://読み込み用に強制)になる。
+const defaultWasmBaseUrl = `${import.meta.env.BASE_URL}mediapipe/wasm`
 const defaultModelAssetPath =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 

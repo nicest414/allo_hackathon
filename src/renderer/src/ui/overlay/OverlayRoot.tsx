@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
-import type { TranscriptSegment } from '../../../../shared/types/analysis'
+import type { FaceAnalysisResult, TranscriptSegment } from '../../../../shared/types/analysis'
 import {
   getScreenAccessStatus,
   listInterviewerScreenSources,
@@ -70,6 +70,19 @@ export function OverlayRoot(): ReactElement {
   const [fillerSummary, setFillerSummary] = useState('')
   const [voiceLoopState, setVoiceLoopState] = useState(voiceAnalysisLoop.getState())
   const [voiceLoopMessage, setVoiceLoopMessage] = useState('')
+  // 表情スコアロジックの動作確認用（一時的なデバッグ表示）。スコア合成前の生値を見える化する。
+  const [candidateFaceDebug, setCandidateFaceDebug] = useState<FaceAnalysisResult | null>(null)
+  const [interviewerFaceDebug, setInterviewerFaceDebug] = useState<FaceAnalysisResult | null>(null)
+
+  useEffect(() => {
+    return faceAnalysisLoop.onAnalysisResult((subject, result) => {
+      if (subject === 'candidate') {
+        setCandidateFaceDebug(result)
+      } else {
+        setInterviewerFaceDebug(result)
+      }
+    })
+  }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
   const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
   const auto = useAutoResponseJudge(autoJudgeEnabled)
@@ -339,8 +352,8 @@ export function OverlayRoot(): ReactElement {
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
-          <button onClick={() => setDominance(dominance - 10)}>You -10</button>
-          <button onClick={() => setDominance(dominance + 10)}>相手 +10</button>
+          <button onClick={() => setDominance(dominance - 10)}>相手 +10</button>
+          <button onClick={() => setDominance(dominance + 10)}>You +10</button>
           <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
           <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
@@ -418,6 +431,18 @@ export function OverlayRoot(): ReactElement {
             </li>
           ))}
         </ul>
+        {candidateFaceDebug ? (
+          <div style={styles.faceLoopMessage}>
+            顔(自分) 生値: smile={candidateFaceDebug.smileLevel} tension=
+            {candidateFaceDebug.tensionLevel} expression={candidateFaceDebug.expression}
+          </div>
+        ) : null}
+        {interviewerFaceDebug ? (
+          <div style={styles.faceLoopMessage}>
+            顔(相手) 生値: smile={interviewerFaceDebug.smileLevel} tension=
+            {interviewerFaceDebug.tensionLevel} expression={interviewerFaceDebug.expression}
+          </div>
+        ) : null}
         <ResponseJudgePanel questionDraft={latestInterviewerQuestion} />
       </div>
     </div>

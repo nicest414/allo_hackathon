@@ -1,5 +1,5 @@
 import type { CaptureErrorInfo } from '../../../shared/types/capture'
-import type { FaceScore } from '../../../shared/types/analysis'
+import type { FaceAnalysisResult, FaceScore } from '../../../shared/types/analysis'
 import {
   createCandidateFaceAnalyzer,
   type FaceAnalyzer
@@ -47,6 +47,8 @@ export interface FaceAnalysisLoop {
   stopInterviewer(): Promise<void>
   stopAll(): Promise<void>
   getState(): FaceAnalysisLoopState
+  /** デバッグ用: スコア合成前の生の解析結果(smileLevel/tensionLevel/expression)を購読する。解除関数を返す。 */
+  onAnalysisResult(listener: (subject: FaceLoopSubject, result: FaceAnalysisResult) => void): () => void
 }
 
 interface FaceAnalysisLoopDependencies {
@@ -117,6 +119,7 @@ export function createFaceAnalysisLoop(
     candidate: Promise.resolve(),
     interviewer: Promise.resolve()
   }
+  const analysisListeners = new Set<(subject: FaceLoopSubject, result: FaceAnalysisResult) => void>()
 
   async function startCandidate(
     options: CandidateFaceAnalysisLoopOptions = {}
@@ -225,6 +228,7 @@ export function createFaceAnalysisLoop(
         if (session.stopped) {
           return
         }
+        analysisListeners.forEach((listener) => listener(session.subject, result))
         reportFaceScore(scoreFace(result))
       }
     } catch (error) {
@@ -303,7 +307,11 @@ export function createFaceAnalysisLoop(
     getState: () => ({
       candidate: sessions.candidate !== undefined,
       interviewer: sessions.interviewer !== undefined
-    })
+    }),
+    onAnalysisResult: (listener) => {
+      analysisListeners.add(listener)
+      return () => analysisListeners.delete(listener)
+    }
   }
 }
 
