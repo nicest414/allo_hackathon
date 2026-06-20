@@ -40,6 +40,9 @@ mise run build      # ビルド
 
 > 音声ループバック取得など一部機能は macOS 前提（ScreenCaptureKit）。詳細は下記「技術選定」を参照。
 
+APIキー（`GEMINI_API_KEY` / `DEEPGRAM_API_KEY`）の取得手順・無料枠・`STT_PROVIDER` ごとの
+必須キー・安全な共有方法は **[docs/development-setup.md](docs/development-setup.md)** を参照。
+
 ## 入力
 
 | 項目 | 取得元 | 対象 |
