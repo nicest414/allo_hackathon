@@ -9,6 +9,37 @@
 - 就活生・面接官それぞれの状態（表情・声・発言内容）から優勢度を算出する
 - 優勢度が振り切れた時にカットイン演出を入れる
 
+## 開発環境セットアップ
+
+ツールバージョンは [mise](https://mise.jdx.dev/) で統一している（Node は `mise.toml` で **22 (LTS)** に固定。ローカルと CI が同じ定義を参照する）。
+
+```bash
+# 1. mise を導入（未インストールの場合）
+brew install mise
+# シェルに有効化（zsh の例。詳細は mise のドキュメント参照）
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc && exec zsh
+
+# 2. プロジェクト直下で設定を信頼して Node 22 を導入
+mise trust      # mise.toml を初回のみ信頼する（セキュリティ機能）
+mise install
+
+# 3. 初回セットアップ（依存インストール + .env 作成）
+mise run setup
+#   → npm ci と、.env.example からの .env 作成を行う（既存の .env は上書きしない）
+#   → 作成された .env に各自の API キー（GEMINI_API_KEY 等）を記入する
+```
+
+日常の開発タスク：
+
+```bash
+mise run dev        # 開発起動（electron-vite dev）
+mise run test       # テスト（vitest）
+mise run typecheck  # 型チェック
+mise run build      # ビルド
+```
+
+> 音声ループバック取得など一部機能は macOS 前提（ScreenCaptureKit）。詳細は下記「技術選定」を参照。
+
 ## 入力
 
 | 項目 | 取得元 | 対象 |
