@@ -196,18 +196,6 @@ export function OverlayRoot(): ReactElement {
     setInterviewerSttMessage('面接官STT送信を停止しました')
   }
 
-  const startCandidateFaceLoop = async (): Promise<void> => {
-    const result = await faceAnalysisLoop.startCandidate({ fps: 6, width: 640, height: 480 })
-    refreshFaceLoopState()
-    setFaceLoopMessage(result.ok ? '就活生カメラ解析中' : result.error.message)
-  }
-
-  const stopCandidateFaceLoop = async (): Promise<void> => {
-    await faceAnalysisLoop.stopCandidate()
-    refreshFaceLoopState()
-    setFaceLoopMessage('就活生カメラ解析を停止しました')
-  }
-
   const loadScreenSources = async (): Promise<void> => {
     // 先に画面収録許可を確認し、未許可なら設定誘導を出す（取得が黒画/失敗するのを防ぐ）。
     const accessStatus = await getScreenAccessStatus()
@@ -243,51 +231,66 @@ export function OverlayRoot(): ReactElement {
     }
   }
 
-  const startInterviewerFaceLoop = async (): Promise<void> => {
-    const result = await faceAnalysisLoop.startInterviewer({
+  const startCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
+    const candidateResult = await faceAnalysisLoop.startCandidate({
+      fps: 6,
+      width: 640,
+      height: 480
+    })
+    const interviewerResult = await faceAnalysisLoop.startInterviewer({
       sourceId: selectedScreenSourceId,
       fps: 4,
       width: 1280,
       height: 720
     })
     refreshFaceLoopState()
-    setFaceLoopMessage(result.ok ? '面接官画面解析中' : result.error.message)
 
-    if (result.ok) {
+    if (interviewerResult.ok) {
       void captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId }).catch(
         (error: unknown) => {
           console.warn('Failed to initialize interviewer portrait image', error)
         }
       )
     }
-  }
 
-  const stopInterviewerFaceLoop = async (): Promise<void> => {
-    await faceAnalysisLoop.stopInterviewer()
-    refreshFaceLoopState()
-    setFaceLoopMessage('面接官画面解析を停止しました')
-  }
-
-  const retakeCandidatePortrait = async (): Promise<void> => {
-    setFaceLoopMessage('顔写真を再取得しています…')
-    const imageUrl = await captureAndStoreCandidatePortrait()
+    const failureMessages: string[] = []
+    if (!candidateResult.ok) {
+      failureMessages.push(`就活生カメラ解析に失敗しました: ${candidateResult.error.message}`)
+    }
+    if (!interviewerResult.ok) {
+      failureMessages.push(`面接官画面解析に失敗しました: ${interviewerResult.error.message}`)
+    }
     setFaceLoopMessage(
-      imageUrl ? '候補者の顔写真を再取得しました' : '候補者の顔写真の再取得に失敗しました'
+      failureMessages.length > 0 ? failureMessages.join(' / ') : '就活生カメラ・面接官画面の解析中'
     )
   }
 
-  const retakeInterviewerPortrait = async (): Promise<void> => {
+  const stopCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
+    await faceAnalysisLoop.stopAll()
+    refreshFaceLoopState()
+    setFaceLoopMessage('就活生カメラ・面接官画面の解析を停止しました')
+  }
+
+  const retakeCandidateAndInterviewerPortraits = async (): Promise<void> => {
+    setFaceLoopMessage('顔写真を再取得しています…')
+
+    const candidateImageUrl = await captureAndStoreCandidatePortrait()
+    const interviewerImageUrl = selectedScreenSourceId
+      ? await captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId })
+      : null
+
+    const failureMessages: string[] = []
+    if (!candidateImageUrl) {
+      failureMessages.push('候補者の顔写真の再取得に失敗しました')
+    }
     if (!selectedScreenSourceId) {
-      setFaceLoopMessage('面接官の画面ソースが未選択です')
-      return
+      failureMessages.push('面接官の画面ソースが未選択です')
+    } else if (!interviewerImageUrl) {
+      failureMessages.push('面接官の顔写真の再取得に失敗しました')
     }
 
-    setFaceLoopMessage('面接官の顔写真を再取得しています…')
-    const imageUrl = await captureAndStoreInterviewerPortrait({
-      sourceId: selectedScreenSourceId
-    })
     setFaceLoopMessage(
-      imageUrl ? '面接官の顔写真を再取得しました' : '面接官の顔写真の再取得に失敗しました'
+      failureMessages.length > 0 ? failureMessages.join(' / ') : '顔写真を再取得しました'
     )
   }
 
@@ -330,12 +333,6 @@ export function OverlayRoot(): ReactElement {
           <button onClick={() => setDominance(dominance + 10)}>相手 +10</button>
           <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
           <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
-          {faceLoopState.candidate ? (
-            <button onClick={() => void stopCandidateFaceLoop()}>カメラ停止</button>
-          ) : (
-            <button onClick={() => void startCandidateFaceLoop()}>カメラ開始</button>
-          )}
-          <button onClick={() => void retakeCandidatePortrait()}>顔写真再取得（自分）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (
             <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
@@ -351,12 +348,18 @@ export function OverlayRoot(): ReactElement {
               </option>
             ))}
           </select>
-          {faceLoopState.interviewer ? (
-            <button onClick={() => void stopInterviewerFaceLoop()}>面接官停止</button>
+          {faceLoopState.candidate || faceLoopState.interviewer ? (
+            <button onClick={() => void stopCandidateAndInterviewerFaceLoops()}>
+              カメラ・面接官停止
+            </button>
           ) : (
-            <button onClick={() => void startInterviewerFaceLoop()}>面接官開始</button>
+            <button onClick={() => void startCandidateAndInterviewerFaceLoops()}>
+              カメラ・面接官開始
+            </button>
           )}
-          <button onClick={() => void retakeInterviewerPortrait()}>顔写真再取得（相手）</button>
+          <button onClick={() => void retakeCandidateAndInterviewerPortraits()}>
+            顔写真再取得
+          </button>
           {sttPipelineState.running ? (
             <button onClick={() => void stopSttPipeline()}>STT停止</button>
           ) : (
