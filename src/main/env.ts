@@ -43,6 +43,39 @@ export function getDeepgramApiKey(): string | undefined {
   return getMainEnv().deepgramApiKey
 }
 
+const SETUP_DOC_HINT = '取得手順: docs/development-setup.md'
+
+/**
+ * GEMINI_API_KEY を必須として取得する。未設定なら取得手順つきのエラーを投げる。
+ * キーが無くてもスタブで動かしたい処理は getGeminiApiKey() を使うこと。
+ */
+export function requireGeminiApiKey(): string {
+  const key = getGeminiApiKey()
+
+  if (!key) {
+    throw new Error(
+      `GEMINI_API_KEY が未設定です。.env に GEMINI_API_KEY を設定してください。${SETUP_DOC_HINT}`
+    )
+  }
+
+  return key
+}
+
+/**
+ * DEEPGRAM_API_KEY を必須として取得する。未設定なら取得手順つきのエラーを投げる。
+ */
+export function requireDeepgramApiKey(): string {
+  const key = getDeepgramApiKey()
+
+  if (!key) {
+    throw new Error(
+      `DEEPGRAM_API_KEY が未設定です。.env に DEEPGRAM_API_KEY を設定してください。${SETUP_DOC_HINT}`
+    )
+  }
+
+  return key
+}
+
 export function getSttProvider(): SttProviderName {
   return getMainEnv().sttProvider
 }
