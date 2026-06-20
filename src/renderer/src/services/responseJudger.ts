@@ -19,7 +19,7 @@ const DEFAULT_MIN_INTERVAL_MS = 1500
 export type ResponseJudgeOutcome =
   | { status: 'ok'; result: LlmJudgeResponseResult }
   | { status: 'error'; result: LlmJudgeResponseResult }
-  | { status: 'skipped'; reason: 'busy' | 'throttled' | 'empty' }
+  | { status: 'skipped'; reason: 'busy' | 'throttled' | 'empty' | 'duplicate' }
 
 export interface ResponseJudgerOptions {
   /** 実呼び出し関数（テストで差し替え可能）。既定はIPC窓口。 */
@@ -41,6 +41,7 @@ export function createResponseJudger(options: ResponseJudgerOptions = {}): Respo
 
   let inFlight = false
   let lastCallAt = Number.NEGATIVE_INFINITY
+  let lastJudged: LlmJudgeResponseRequest | undefined
 
   return {
     async judge(request) {
@@ -56,10 +57,20 @@ export function createResponseJudger(options: ResponseJudgerOptions = {}): Respo
         return { status: 'skipped', reason: 'throttled' }
       }
 
+      // 直近に判定したのと同一の質問×回答は再判定しない（トークン浪費防止）。
+      if (
+        lastJudged &&
+        lastJudged.question === request.question &&
+        lastJudged.answer === request.answer
+      ) {
+        return { status: 'skipped', reason: 'duplicate' }
+      }
+
       inFlight = true
 
       try {
         const result = await judgeFn(request)
+        lastJudged = { question: request.question, answer: request.answer }
         return { status: 'ok', result }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
