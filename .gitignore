@@ -2,3 +2,6 @@ node_modules/
 dist/
 out/
 .env
+
+# 動画素材作成時の生/中間ファイル（コード上未参照、サイズが大きいため追跡しない）
+src/renderer/src/assets/video/*.mov

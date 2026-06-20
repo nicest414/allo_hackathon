@@ -2,6 +2,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import './DominanceClashBanner.css'
 import leftPortrait from '../../assets/portrait/left.png'
 import rightPortrait from '../../assets/portrait/right.png'
+import lightningVideo from '../../assets/video/lightning_transparent.webm'
 
 interface DominanceClashBannerProps {
   value: number
@@ -129,7 +130,18 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
       <div className="clash-banner__clash">
         <div className="clash-banner__burst" />
         <div className="clash-banner__flash" />
-        <div className="clash-banner__beam" />
+        <div className="clash-banner__lightning-mask">
+          <video
+            className="clash-banner__lightning"
+            src={lightningVideo}
+            autoPlay
+            loop
+            muted
+            playsInline
+            disablePictureInPicture
+            aria-hidden="true"
+          />
+        </div>
         <div className="clash-banner__value">{clamped}</div>
       </div>
       <span className="clash-banner__label clash-banner__label--left">劣勢</span>
