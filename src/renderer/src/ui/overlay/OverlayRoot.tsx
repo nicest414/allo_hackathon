@@ -11,6 +11,7 @@ import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
+import { DebugPanel } from '../debug/DebugPanel'
 
 const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
@@ -160,6 +161,7 @@ export function OverlayRoot(): ReactElement {
   return (
     <div style={styles.root}>
       <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
+      <DebugPanel />
       <div style={styles.content}>
         <div style={styles.values}>
           優勢度: {dominance}（基礎: {baseDominance}）

@@ -24,9 +24,14 @@ interface DominanceState {
   dominance: number
   scores: DominanceScores
   portraitImageUrls: PortraitImageUrls
+  mockMode: boolean
+  activeCutin: 'dominance' | 'deficit' | null
+  setMockMode: (enabled: boolean) => void
   setDominance: (dominance: number) => void
-  setScores: (scores: Partial<DominanceScores>) => void
+  setScores: (scores: Partial<DominanceScores>, force?: boolean) => void
   setCandidatePortraitImageUrl: (url: string) => void
+  triggerCutin: (type: 'dominance' | 'deficit') => void
+  clearCutin: () => void
   reset: () => void
 }
 
@@ -68,9 +73,17 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
   dominance: initialDominance,
   scores: initialScores,
   portraitImageUrls: {},
+  mockMode: false,
+  activeCutin: null,
+  setMockMode: (mockMode) => set({ mockMode }),
   setDominance: (dominance) => set({ dominance: clamp(dominance) }),
-  setScores: (partialScores) =>
+  setScores: (partialScores, force = false) =>
     set((state) => {
+      // mockMode中はforceフラグがない更新（＝通常センサー等からの自動流入）を無視する
+      if (state.mockMode && !force) {
+        return {}
+      }
+
       const next = { ...state.scores }
       let accumulatedResponseScore = state.accumulatedResponseScore
 
@@ -97,11 +110,15 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
         candidate: url
       }
     })),
+  triggerCutin: (type) => set({ activeCutin: type }),
+  clearCutin: () => set({ activeCutin: null }),
   reset: () =>
     set({
       accumulatedResponseScore: undefined,
       baseDominance: initialDominance,
       dominance: initialDominance,
-      scores: initialScores
+      scores: initialScores,
+      mockMode: false,
+      activeCutin: null
     })
 }))
