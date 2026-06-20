@@ -29,6 +29,10 @@ import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
 import { useAutoResponseJudge } from '../../hooks/useAutoResponseJudge'
+import {
+  buildCursorTransparencyMaskStyle,
+  type CursorPosition
+} from './cursorTransparencyMask'
 
 const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
@@ -73,6 +77,7 @@ export function OverlayRoot(): ReactElement {
   // 表情スコアロジックの動作確認用（一時的なデバッグ表示）。スコア合成前の生値を見える化する。
   const [candidateFaceDebug, setCandidateFaceDebug] = useState<FaceAnalysisResult | null>(null)
   const [interviewerFaceDebug, setInterviewerFaceDebug] = useState<FaceAnalysisResult | null>(null)
+  const overlayRootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     return faceAnalysisLoop.onAnalysisResult((subject, result) => {
@@ -82,6 +87,34 @@ export function OverlayRoot(): ReactElement {
         setInterviewerFaceDebug(result)
       }
     })
+  }, [])
+
+  useEffect(() => {
+    const applyCursorMask = (cursorPosition: CursorPosition | null): void => {
+      const element = overlayRootRef.current
+      if (!element) {
+        return
+      }
+
+      const maskStyle = buildCursorTransparencyMaskStyle(cursorPosition)
+      element.style.maskImage = maskStyle.maskImage?.toString() ?? ''
+      element.style.webkitMaskImage = maskStyle.WebkitMaskImage?.toString() ?? ''
+    }
+    const updateCursorPosition = (event: MouseEvent): void => {
+      applyCursorMask({ x: event.clientX, y: event.clientY })
+    }
+    const clearCursorPosition = (event: MouseEvent): void => {
+      if (event.relatedTarget === null) {
+        applyCursorMask(null)
+      }
+    }
+
+    window.addEventListener('mousemove', updateCursorPosition)
+    window.addEventListener('mouseout', clearCursorPosition)
+    return () => {
+      window.removeEventListener('mousemove', updateCursorPosition)
+      window.removeEventListener('mouseout', clearCursorPosition)
+    }
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
   const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
@@ -337,7 +370,7 @@ export function OverlayRoot(): ReactElement {
   }
 
   return (
-    <div style={styles.root}>
+    <div ref={overlayRootRef} style={styles.root}>
       <DominanceClashBanner
         value={dominance}
         candidatePortraitSrc={candidatePortraitImageUrl}
