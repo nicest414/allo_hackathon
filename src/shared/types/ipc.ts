@@ -1,3 +1,5 @@
+import type { ResponseJudgment, TranscriptSegment } from './analysis'
+
 export const IPC_CHANNELS = {
   sttStart: 'stt:start',
   sttStop: 'stt:stop',
@@ -17,20 +19,11 @@ export interface SttAudioChunkRequest {
   audio: ArrayBuffer
 }
 
-export interface SttTranscriptEvent {
-  text: string
-  isFinal: boolean
-}
+export type SttTranscriptEvent = Pick<TranscriptSegment, 'text' | 'isFinal'>
 
-export interface LlmJudgeResponseRequest {
-  question: string
-  answer: string
-}
+export type LlmJudgeResponseRequest = Pick<ResponseJudgment, 'question' | 'answer'>
 
-export interface LlmJudgeResponseResult {
-  score: number
-  reason: string
-}
+export type LlmJudgeResponseResult = Pick<ResponseJudgment, 'score' | 'reason'>
 
 export interface AlloPreloadApi {
   stt: {
