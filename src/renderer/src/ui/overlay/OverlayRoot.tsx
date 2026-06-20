@@ -2,7 +2,11 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactElement } fr
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
 import type { TranscriptSegment } from '../../../../shared/types/analysis'
-import { listInterviewerScreenSources } from '../../capture/interviewerScreen'
+import {
+  getScreenAccessStatus,
+  listInterviewerScreenSources,
+  openScreenSettings
+} from '../../capture/interviewerScreen'
 import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopbackSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
@@ -35,6 +39,8 @@ export function OverlayRoot(): ReactElement {
   const [screenSources, setScreenSources] = useState<DesktopCaptureSource[]>([])
   const [selectedScreenSourceId, setSelectedScreenSourceId] = useState('')
   const [faceLoopMessage, setFaceLoopMessage] = useState('')
+  // 画面収録許可が未許可のとき「許可設定を開く」ボタンを出すためのフラグ。
+  const [screenAccessDenied, setScreenAccessDenied] = useState(false)
   const [sttPipelineState, setSttPipelineState] = useState(candidateMicSttPipeline.getState())
   const [interviewerSttPipelineState, setInterviewerSttPipelineState] = useState(
     interviewerLoopbackSttPipeline.getState()
@@ -163,18 +169,38 @@ export function OverlayRoot(): ReactElement {
   }
 
   const loadScreenSources = async (): Promise<void> => {
-    const sources = await listInterviewerScreenSources({
-      types: ['screen', 'window'],
-      thumbnailSize: { width: 160, height: 90 }
-    })
+    // 先に画面収録許可を確認し、未許可なら設定誘導を出す（取得が黒画/失敗するのを防ぐ）。
+    const accessStatus = await getScreenAccessStatus()
+    if (accessStatus !== 'granted') {
+      setScreenAccessDenied(true)
+      setScreenSources([])
+      setFaceLoopMessage(
+        '画面収録の許可が必要です。「許可設定を開く」→「画面収録」でこのアプリを有効化し、再度「画面取得」を押してください。'
+      )
+      return
+    }
 
-    setScreenSources(sources)
-    setSelectedScreenSourceId((current) => current || sources[0]?.id || '')
-    setFaceLoopMessage(
-      sources.length === 0
-        ? '共有できる画面ソースが見つかりません'
-        : '面接官画面ソースを更新しました'
-    )
+    setScreenAccessDenied(false)
+
+    try {
+      const sources = await listInterviewerScreenSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 160, height: 90 }
+      })
+
+      setScreenSources(sources)
+      setSelectedScreenSourceId((current) => current || sources[0]?.id || '')
+      setFaceLoopMessage(
+        sources.length === 0
+          ? '共有できる画面ソースが見つかりません'
+          : '面接官画面ソースを更新しました'
+      )
+    } catch (error) {
+      setScreenSources([])
+      setFaceLoopMessage(
+        `画面ソースの取得に失敗しました: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
   }
 
   const startInterviewerFaceLoop = async (): Promise<void> => {
@@ -232,6 +258,9 @@ export function OverlayRoot(): ReactElement {
             <button onClick={() => void startCandidateFaceLoop()}>カメラ開始</button>
           )}
           <button onClick={() => void loadScreenSources()}>画面取得</button>
+          {screenAccessDenied ? (
+            <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
+          ) : null}
           <select
             value={selectedScreenSourceId}
             onChange={(event) => setSelectedScreenSourceId(event.target.value)}
