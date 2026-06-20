@@ -72,7 +72,7 @@ describe('DeepgramSttProvider', () => {
 
   it('フィラー保持パラメータとトークン認証で接続する', async () => {
     const provider = new DeepgramSttProvider('test-key')
-    await provider.start({ sampleRate: 48000, language: 'ja' })
+    await provider.start({ sampleRate: 48000, language: 'ja', speaker: 'candidate' })
 
     const ws = lastSocket()
     expect(ws.url).toContain('wss://api.deepgram.com/v1/listen')
@@ -89,7 +89,7 @@ describe('DeepgramSttProvider', () => {
     const received: TranscriptSegment[] = []
     provider.onTranscript((segment) => received.push(segment))
 
-    await provider.start({ sampleRate: 16000 })
+    await provider.start({ sampleRate: 16000, speaker: 'candidate' })
     const ws = lastSocket()
     ws.emitOpen()
 
@@ -114,7 +114,7 @@ describe('DeepgramSttProvider', () => {
     const received: TranscriptSegment[] = []
     provider.onTranscript((segment) => received.push(segment))
 
-    await provider.start({ sampleRate: 16000 })
+    await provider.start({ sampleRate: 16000, speaker: 'candidate' })
     const ws = lastSocket()
     ws.emitOpen()
 
@@ -126,7 +126,7 @@ describe('DeepgramSttProvider', () => {
 
   it('接続確立前のchunkはキューに退避し、open後に送信する', async () => {
     const provider = new DeepgramSttProvider('k')
-    await provider.start({ sampleRate: 16000 })
+    await provider.start({ sampleRate: 16000, speaker: 'candidate' })
     const ws = lastSocket()
 
     const chunk = new ArrayBuffer(8)
@@ -139,7 +139,7 @@ describe('DeepgramSttProvider', () => {
 
   it('open後のchunkは即送信する', async () => {
     const provider = new DeepgramSttProvider('k')
-    await provider.start({ sampleRate: 16000 })
+    await provider.start({ sampleRate: 16000, speaker: 'candidate' })
     const ws = lastSocket()
     ws.emitOpen()
 
@@ -150,7 +150,7 @@ describe('DeepgramSttProvider', () => {
 
   it('stop で CloseStream を送って切断する', async () => {
     const provider = new DeepgramSttProvider('k')
-    await provider.start({ sampleRate: 16000 })
+    await provider.start({ sampleRate: 16000, speaker: 'candidate' })
     const ws = lastSocket()
     ws.emitOpen()
 

@@ -255,6 +255,34 @@ describe('createCandidateMicSttPipeline', () => {
     expect(secondAudio.close).not.toHaveBeenCalled()
     expect(pipeline.getState()).toEqual({ running: true, sampleRate: 16000 })
   })
+
+  it('forwards only its own speaker (candidate) transcripts to the listener', async () => {
+    const audio = createFakeAudioContext(16000)
+    let wrapped: ((event: SttTranscriptEvent) => void) | undefined
+    const received: SttTranscriptEvent[] = []
+
+    const pipeline = createCandidateMicSttPipeline({
+      getMicStream: async () => ({
+        ok: true,
+        stream: { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream
+      }),
+      createAudioContext: () => audio.context,
+      startStt: vi.fn(async () => undefined),
+      stopStt: vi.fn(async () => undefined),
+      sendAudioChunk: vi.fn(async () => undefined),
+      onTranscript: (listener) => {
+        wrapped = listener
+        return vi.fn()
+      }
+    })
+
+    await pipeline.start({ onTranscript: (event) => received.push(event) })
+
+    wrapped?.({ text: '就活生の回答', isFinal: true, speaker: 'candidate' })
+    wrapped?.({ text: '面接官の質問', isFinal: true, speaker: 'interviewer' })
+
+    expect(received).toEqual([{ text: '就活生の回答', isFinal: true, speaker: 'candidate' }])
+  })
 })
 
 function readInt16Values(view: DataView): number[] {

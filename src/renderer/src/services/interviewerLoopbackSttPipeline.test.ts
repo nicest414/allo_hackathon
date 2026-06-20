@@ -28,7 +28,11 @@ describe('createInterviewerLoopbackSttPipeline', () => {
     audio.emit(new Float32Array(4000).fill(0.5))
     await flushPromises()
 
-    expect(startStt).toHaveBeenCalledWith({ sampleRate: 16000, language: 'ja-JP' })
+    expect(startStt).toHaveBeenCalledWith({
+      sampleRate: 16000,
+      language: 'ja-JP',
+      speaker: 'interviewer'
+    })
     expect(sentChunks).toHaveLength(1)
     expect(sentChunks[0].byteLength).toBe(8000)
     expect(new DataView(sentChunks[0]).getInt16(0, true)).toBe(16383)

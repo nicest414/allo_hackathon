@@ -56,4 +56,42 @@ describe('detectFillers', () => {
     expect(result.matchedFillers).toEqual(['つまり'])
     expect(result.fillerCount).toBe(1)
   })
+
+  it('detects Deepgram表記ゆれ（ええと/うーん/んー/あー）', () => {
+    const result = detectFillers([
+      { timestamp: 0, text: 'ええと、うーん、んー、あー', isFinal: true }
+    ])
+
+    expect(result.fillerCount).toBe(4)
+  })
+
+  it('連続する長音を畳んで「えーー」を「えー」として検出する', () => {
+    const result = detectFillers([{ timestamp: 0, text: 'えーー、そうですね', isFinal: true }])
+
+    expect(result.matchedFillers).toContain('えー')
+  })
+
+  it('windowMs 指定時は直近のセグメントのみ集計する（古いフィラーは減衰）', () => {
+    const now = 100_000
+    const segments = [
+      { timestamp: now - 20_000, text: 'えっと えっと えっと', isFinal: true as const }, // 窓外
+      { timestamp: now - 1_000, text: 'なんか', isFinal: true as const } // 窓内
+    ]
+
+    const windowed = detectFillers(segments, undefined, { windowMs: 10_000, now: () => now })
+    expect(windowed.fillerCount).toBe(1) // 窓内の「なんか」だけ
+
+    const all = detectFillers(segments)
+    expect(all.fillerCount).toBe(4) // 全件なら4
+  })
+
+  it('windowMs 内に新しいセグメントが無ければ score は 0 に戻る（揺れ動く）', () => {
+    const now = 100_000
+    const segments = [
+      { timestamp: now - 30_000, text: 'えっと えっと', isFinal: true as const }
+    ]
+
+    const result = detectFillers(segments, undefined, { windowMs: 10_000, now: () => now })
+    expect(result.score).toBe(0)
+  })
 })
