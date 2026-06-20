@@ -9,8 +9,12 @@ export interface DominanceScores {
 }
 
 interface DominanceState {
+  /** リアルタイム4項目だけで算出した基礎優勢度（LLM補正前） */
+  baseDominance: number
+  /** LLM補正を適用した最終的な優勢度（UI表示用） */
   dominance: number
   scores: DominanceScores
+  setBaseDominance: (baseDominance: number) => void
   setDominance: (dominance: number) => void
   setScores: (scores: Partial<DominanceScores>) => void
   reset: () => void
@@ -29,8 +33,10 @@ const initialScores: DominanceScores = {
 }
 
 export const useDominanceStore = create<DominanceState>((set) => ({
+  baseDominance: initialDominance,
   dominance: initialDominance,
   scores: initialScores,
+  setBaseDominance: (baseDominance) => set({ baseDominance: clamp(baseDominance) }),
   setDominance: (dominance) => set({ dominance: clamp(dominance) }),
   setScores: (partialScores) =>
     set((state) => {
@@ -43,5 +49,6 @@ export const useDominanceStore = create<DominanceState>((set) => ({
       }
       return { scores: next }
     }),
-  reset: () => set({ dominance: initialDominance, scores: initialScores })
+  reset: () =>
+    set({ baseDominance: initialDominance, dominance: initialDominance, scores: initialScores })
 }))
