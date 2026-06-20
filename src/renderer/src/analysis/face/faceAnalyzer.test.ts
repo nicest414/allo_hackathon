@@ -1,11 +1,25 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FaceLandmarker as MediaPipeFaceLandmarker } from '@mediapipe/tasks-vision'
 import { createCandidateFaceAnalyzer, toFaceAnalysisResult } from './candidateFaceAnalyzer'
 import { createInterviewerFaceAnalyzer } from './interviewerFaceAnalyzer'
 import {
+  DEFAULT_FACE_LANDMARKER_MODEL_URL,
   createFaceLandmarker,
   createStubFaceLandmarker,
   type NormalizedFaceLandmark
 } from './faceLandmarker'
+
+vi.mock('@mediapipe/tasks-vision', () => ({
+  FaceLandmarker: {
+    createFromOptions: vi.fn()
+  }
+}))
+
+const createMediaPipeFromOptions = vi.mocked(MediaPipeFaceLandmarker.createFromOptions)
+
+beforeEach(() => {
+  createMediaPipeFromOptions.mockReset()
+})
 
 describe('face analyzers', () => {
   it('returns unknown when the landmarker has no face result', () => {
@@ -74,6 +88,113 @@ describe('face analyzers', () => {
     })
 
     await analyzer.close?.()
+
+    expect(close).toHaveBeenCalledOnce()
+  })
+})
+
+describe('MediaPipe face landmarker wrapper', () => {
+  it('lazily creates a MediaPipe FaceLandmarker and maps the first detected face', async () => {
+    const detectForVideo = vi.fn(() => ({
+      faceLandmarks: [[{ x: 0.1, y: 0.2, z: -0.3, visibility: 0.9 }]],
+      faceBlendshapes: [],
+      facialTransformationMatrixes: []
+    }))
+    createMediaPipeFromOptions.mockResolvedValue({
+      detectForVideo,
+      close: vi.fn()
+    } as unknown as Awaited<ReturnType<typeof MediaPipeFaceLandmarker.createFromOptions>>)
+    const input = {} as ImageData
+
+    const landmarker = createFaceLandmarker({
+      now: () => 123,
+      wasmFileset: {
+        wasmLoaderPath: '/test/vision.js',
+        wasmBinaryPath: '/test/vision.wasm'
+      }
+    })
+
+    const result = await landmarker.detect(input)
+
+    expect(createMediaPipeFromOptions).toHaveBeenCalledOnce()
+    expect(createMediaPipeFromOptions).toHaveBeenCalledWith(
+      {
+        wasmLoaderPath: '/test/vision.js',
+        wasmBinaryPath: '/test/vision.wasm'
+      },
+      {
+        runningMode: 'VIDEO',
+        numFaces: 1,
+        baseOptions: {
+          modelAssetPath: DEFAULT_FACE_LANDMARKER_MODEL_URL
+        }
+      }
+    )
+    expect(detectForVideo).toHaveBeenCalledWith(input, 123)
+    expect(result).toEqual({
+      timestamp: 123,
+      landmarks: [{ x: 0.1, y: 0.2, z: -0.3, visibility: 0.9 }]
+    })
+  })
+
+  it('returns null when MediaPipe detects no face landmarks', async () => {
+    createMediaPipeFromOptions.mockResolvedValue({
+      detectForVideo: vi.fn(() => ({
+        faceLandmarks: [],
+        faceBlendshapes: [],
+        facialTransformationMatrixes: []
+      })),
+      close: vi.fn()
+    } as unknown as Awaited<ReturnType<typeof MediaPipeFaceLandmarker.createFromOptions>>)
+
+    const landmarker = createFaceLandmarker({
+      wasmFileset: {
+        wasmLoaderPath: '/test/vision.js',
+        wasmBinaryPath: '/test/vision.wasm'
+      }
+    })
+
+    await expect(landmarker.detect({} as ImageData, 456)).resolves.toBeNull()
+  })
+
+  it('returns null when MediaPipe frame detection fails', async () => {
+    createMediaPipeFromOptions.mockResolvedValue({
+      detectForVideo: vi.fn(() => {
+        throw new Error('frame detection failed')
+      }),
+      close: vi.fn()
+    } as unknown as Awaited<ReturnType<typeof MediaPipeFaceLandmarker.createFromOptions>>)
+
+    const landmarker = createFaceLandmarker({
+      wasmFileset: {
+        wasmLoaderPath: '/test/vision.js',
+        wasmBinaryPath: '/test/vision.wasm'
+      }
+    })
+
+    await expect(landmarker.detect({} as ImageData, 456)).resolves.toBeNull()
+  })
+
+  it('closes the initialized MediaPipe detector', async () => {
+    const close = vi.fn()
+    createMediaPipeFromOptions.mockResolvedValue({
+      detectForVideo: vi.fn(() => ({
+        faceLandmarks: [[{ x: 0, y: 0 }]],
+        faceBlendshapes: [],
+        facialTransformationMatrixes: []
+      })),
+      close
+    } as unknown as Awaited<ReturnType<typeof MediaPipeFaceLandmarker.createFromOptions>>)
+
+    const landmarker = createFaceLandmarker({
+      wasmFileset: {
+        wasmLoaderPath: '/test/vision.js',
+        wasmBinaryPath: '/test/vision.wasm'
+      }
+    })
+
+    await landmarker.detect({} as ImageData, 1)
+    await landmarker.close?.()
 
     expect(close).toHaveBeenCalledOnce()
   })
