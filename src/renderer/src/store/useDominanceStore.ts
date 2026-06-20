@@ -1,4 +1,9 @@
 import { create } from 'zustand'
+import {
+  accumulateResponseScore,
+  calculateBaseDominance,
+  calculateDominance
+} from '../domain/scoring/dominanceCalculator'
 
 export interface DominanceScores {
   candidateFace: number
@@ -8,15 +13,20 @@ export interface DominanceScores {
   response: number
 }
 
+export interface PortraitImageUrls {
+  candidate?: string
+}
+
 interface DominanceState {
   /** リアルタイム4項目だけで算出した基礎優勢度（LLM補正前） */
   baseDominance: number
   /** LLM補正を適用した最終的な優勢度（UI表示用） */
   dominance: number
   scores: DominanceScores
-  setBaseDominance: (baseDominance: number) => void
+  portraitImageUrls: PortraitImageUrls
   setDominance: (dominance: number) => void
   setScores: (scores: Partial<DominanceScores>) => void
+  setCandidatePortraitImageUrl: (url: string) => void
   reset: () => void
 }
 
@@ -32,23 +42,66 @@ const initialScores: DominanceScores = {
   response: 50
 }
 
-export const useDominanceStore = create<DominanceState>((set) => ({
+function calculateDominanceState(
+  scores: DominanceScores
+): Pick<DominanceState, 'baseDominance' | 'dominance'> {
+  const input = {
+    timestamp: Date.now(),
+    candidateFace: { subject: 'candidate', value: scores.candidateFace } as const,
+    interviewerFace: { subject: 'interviewer', value: scores.interviewerFace } as const,
+    voice: { value: scores.voice },
+    filler: { matchedFillers: [], fillerCount: 0, score: scores.filler },
+    response: scores.response
+  }
+  const base = calculateBaseDominance(input)
+  const corrected = calculateDominance(input)
+
+  return { baseDominance: base.value, dominance: corrected.value }
+}
+
+interface DominanceInternalState extends DominanceState {
+  accumulatedResponseScore?: number
+}
+
+export const useDominanceStore = create<DominanceInternalState>((set) => ({
   baseDominance: initialDominance,
   dominance: initialDominance,
   scores: initialScores,
-  setBaseDominance: (baseDominance) => set({ baseDominance: clamp(baseDominance) }),
+  portraitImageUrls: {},
   setDominance: (dominance) => set({ dominance: clamp(dominance) }),
   setScores: (partialScores) =>
     set((state) => {
       const next = { ...state.scores }
+      let accumulatedResponseScore = state.accumulatedResponseScore
+
       for (const key of Object.keys(partialScores) as Array<keyof DominanceScores>) {
         const value = partialScores[key]
         if (value !== undefined) {
-          next[key] = clamp(value)
+          next[key] =
+            key === 'response'
+              ? accumulateResponseScore(accumulatedResponseScore, value)
+              : clamp(value)
+
+          if (key === 'response') {
+            accumulatedResponseScore = next.response
+          }
         }
       }
-      return { scores: next }
+
+      return { scores: next, accumulatedResponseScore, ...calculateDominanceState(next) }
     }),
+  setCandidatePortraitImageUrl: (url) =>
+    set((state) => ({
+      portraitImageUrls: {
+        ...state.portraitImageUrls,
+        candidate: url
+      }
+    })),
   reset: () =>
-    set({ baseDominance: initialDominance, dominance: initialDominance, scores: initialScores })
+    set({
+      accumulatedResponseScore: undefined,
+      baseDominance: initialDominance,
+      dominance: initialDominance,
+      scores: initialScores
+    })
 }))

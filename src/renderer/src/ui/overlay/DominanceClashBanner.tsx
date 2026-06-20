@@ -5,6 +5,7 @@ import rightPortrait from '../../assets/portrait/right.png'
 
 interface DominanceClashBannerProps {
   value: number
+  candidatePortraitSrc?: string
 }
 
 const LEFT_BOLTS = [
@@ -33,10 +34,14 @@ function BoltGroup({ paths }: { paths: string[] }): ReactElement {
  * 優勢/劣勢を、両陣営の雷が中央でせめぎ合うバナー演出として表示する。
  * 各ゾーンの幅は優勢度に応じて変わり、優勢な側が画面のより広い面積を占有する。
  */
-export function DominanceClashBanner({ value }: DominanceClashBannerProps): ReactElement {
+export function DominanceClashBanner({
+  value,
+  candidatePortraitSrc
+}: DominanceClashBannerProps): ReactElement {
   const clamped = Math.min(100, Math.max(0, Math.round(value)))
   const leftWidth = 100 - clamped
   const rightWidth = clamped
+  const rightPortraitSrc = candidatePortraitSrc ?? rightPortrait
 
   return (
     <div className="clash-banner" role="img" aria-label={`優勢度 ${clamped}`}>
@@ -57,7 +62,7 @@ export function DominanceClashBanner({ value }: DominanceClashBannerProps): Reac
       />
       <img
         className="clash-banner__portrait clash-banner__portrait--right"
-        src={rightPortrait}
+        src={rightPortraitSrc}
         alt=""
         aria-hidden="true"
         style={{ left: `${leftWidth}%` }}
