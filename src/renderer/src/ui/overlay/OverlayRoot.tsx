@@ -1,12 +1,20 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement
+} from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
 import type { TranscriptSegment } from '../../../../shared/types/analysis'
 import { listInterviewerScreenSources } from '../../capture/interviewerScreen'
 import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
+import { voiceAnalysisLoop } from '../../services/voiceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
-import { detectFillers } from '../../domain/scoring/fillerDetector'
+import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fillerDetector'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
@@ -40,13 +48,37 @@ export function OverlayRoot(): ReactElement {
   // フィラー検出は確定(final)transcriptの蓄積に対して行うため、最新配列をrefで保持する。
   const finalTranscriptsRef = useRef<TranscriptSegment[]>([])
   const [fillerSummary, setFillerSummary] = useState('')
+  const [voiceLoopState, setVoiceLoopState] = useState(voiceAnalysisLoop.getState())
+  const [voiceLoopMessage, setVoiceLoopMessage] = useState('')
+
+  // 直近 windowMs 内のfinal transcriptだけでフィラーを再評価し、Storeへ反映する。
+  // 黙る/きれいに話すと古いフィラーが窓から抜けてスコアが下がる（=ゲージが揺れ動く）。
+  const recomputeFiller = useCallback((): void => {
+    const cutoff = Date.now() - DEFAULT_FILLER_WINDOW_MS
+    finalTranscriptsRef.current = finalTranscriptsRef.current.filter(
+      (segment) => segment.timestamp >= cutoff
+    )
+    const result = detectFillers(finalTranscriptsRef.current, undefined, {
+      windowMs: DEFAULT_FILLER_WINDOW_MS
+    })
+    setScores({ filler: result.score })
+    setFillerSummary(
+      result.fillerCount > 0
+        ? `フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
+        : 'フィラー未検出'
+    )
+  }, [setScores])
 
   useEffect(() => {
+    // 新規transcriptが来なくても定期的に再評価し、時間経過でフィラースコアを減衰させる。
+    const intervalId = setInterval(recomputeFiller, 1000)
     return () => {
+      clearInterval(intervalId)
       void faceAnalysisLoop.stopAll()
+      void voiceAnalysisLoop.stop()
       void candidateMicSttPipeline.stop()
     }
-  }, [])
+  }, [recomputeFiller])
 
   const reportCandidateFace = (next: number): void => {
     const value = clamp(next)
@@ -75,13 +107,7 @@ export function OverlayRoot(): ReactElement {
       ...finalTranscriptsRef.current,
       { timestamp: Date.now(), text: event.text, isFinal: true }
     ]
-    const result = detectFillers(finalTranscriptsRef.current)
-    setScores({ filler: result.score })
-    setFillerSummary(
-      result.fillerCount > 0
-        ? `フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
-        : 'フィラー未検出'
-    )
+    recomputeFiller()
   }
 
   const startSttPipeline = async (): Promise<void> => {
@@ -99,6 +125,22 @@ export function OverlayRoot(): ReactElement {
     await candidateMicSttPipeline.stop()
     refreshSttPipelineState()
     setSttMessage('STT送信を停止しました')
+  }
+
+  const refreshVoiceLoopState = (): void => {
+    setVoiceLoopState(voiceAnalysisLoop.getState())
+  }
+
+  const startVoiceLoop = async (): Promise<void> => {
+    const result = await voiceAnalysisLoop.start({ intervalMs: 500 })
+    refreshVoiceLoopState()
+    setVoiceLoopMessage(result.ok ? '声解析中' : result.error.message)
+  }
+
+  const stopVoiceLoop = async (): Promise<void> => {
+    await voiceAnalysisLoop.stop()
+    refreshVoiceLoopState()
+    setVoiceLoopMessage('声解析を停止しました')
   }
 
   const startCandidateFaceLoop = async (): Promise<void> => {
@@ -147,14 +189,17 @@ export function OverlayRoot(): ReactElement {
 
   const handleReset = async (): Promise<void> => {
     await faceAnalysisLoop.stopAll()
+    await voiceAnalysisLoop.stop()
     await candidateMicSttPipeline.stop()
     dominanceOrchestrator.reset()
     setCandidateFace(50)
     refreshFaceLoopState()
+    refreshVoiceLoopState()
     refreshSttPipelineState()
     setLatestTranscript('')
     finalTranscriptsRef.current = []
     setFillerSummary('')
+    setVoiceLoopMessage('')
     reset()
   }
 
@@ -201,9 +246,15 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startSttPipeline()}>STT開始</button>
           )}
+          {voiceLoopState.running ? (
+            <button onClick={() => void stopVoiceLoop()}>声解析停止</button>
+          ) : (
+            <button onClick={() => void startVoiceLoop()}>声解析開始</button>
+          )}
           <button onClick={handleReset}>リセット</button>
         </div>
         {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
+        {voiceLoopMessage ? <div style={styles.sttMessage}>{voiceLoopMessage}</div> : null}
         {sttMessage ? <div style={styles.sttMessage}>{sttMessage}</div> : null}
         {latestTranscript ? (
           <div style={styles.transcript}>STT: {latestTranscript}</div>

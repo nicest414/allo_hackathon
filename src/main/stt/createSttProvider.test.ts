@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetMainEnvForTest } from '../env'
 import { createSttProvider } from './createSttProvider'
@@ -11,12 +14,20 @@ describe('createSttProvider', () => {
     key: process.env.DEEPGRAM_API_KEY,
     fake: process.env.STT_FAKE
   }
+  let originalCwd: string
+  let tempDir: string
 
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
     delete process.env.STT_PROVIDER
     delete process.env.DEEPGRAM_API_KEY
     delete process.env.STT_FAKE
+
+    // getMainEnv() は process.cwd()/.env を再読込するため、開発者の実 .env に
+    // DEEPGRAM_API_KEY があってもテストが拾わないよう、.env の無い一時dirへ退避する。
+    originalCwd = process.cwd()
+    tempDir = mkdtempSync(join(tmpdir(), 'allo-stt-provider-test-'))
+    process.chdir(tempDir)
     resetMainEnvForTest()
   })
 
@@ -25,6 +36,8 @@ describe('createSttProvider', () => {
     restore('STT_PROVIDER', original.provider)
     restore('DEEPGRAM_API_KEY', original.key)
     restore('STT_FAKE', original.fake)
+    process.chdir(originalCwd)
+    rmSync(tempDir, { force: true, recursive: true })
     resetMainEnvForTest()
   })
 
