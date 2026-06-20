@@ -62,7 +62,7 @@ git add <対象ファイル>
 git commit -m "$(cat <<'EOF'
 コミットメッセージ
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
 ```

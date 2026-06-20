@@ -2,3 +2,7 @@ node_modules/
 dist/
 out/
 .env
+
+# mise のローカル上書き設定（個人用・共有しない）
+mise.local.toml
+.mise.local.toml
