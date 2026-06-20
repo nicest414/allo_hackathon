@@ -4,6 +4,7 @@ import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
 import type { TranscriptSegment } from '../../../../shared/types/analysis'
 import { listInterviewerScreenSources } from '../../capture/interviewerScreen'
 import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
+import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopbackSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
 import { detectFillers } from '../../domain/scoring/fillerDetector'
@@ -35,8 +36,13 @@ export function OverlayRoot(): ReactElement {
   const [selectedScreenSourceId, setSelectedScreenSourceId] = useState('')
   const [faceLoopMessage, setFaceLoopMessage] = useState('')
   const [sttPipelineState, setSttPipelineState] = useState(candidateMicSttPipeline.getState())
+  const [interviewerSttPipelineState, setInterviewerSttPipelineState] = useState(
+    interviewerLoopbackSttPipeline.getState()
+  )
   const [sttMessage, setSttMessage] = useState('')
+  const [interviewerSttMessage, setInterviewerSttMessage] = useState('')
   const [latestTranscript, setLatestTranscript] = useState('')
+  const [latestInterviewerQuestion, setLatestInterviewerQuestion] = useState('')
   // フィラー検出は確定(final)transcriptの蓄積に対して行うため、最新配列をrefで保持する。
   const finalTranscriptsRef = useRef<TranscriptSegment[]>([])
   const [fillerSummary, setFillerSummary] = useState('')
@@ -45,6 +51,7 @@ export function OverlayRoot(): ReactElement {
     return () => {
       void faceAnalysisLoop.stopAll()
       void candidateMicSttPipeline.stop()
+      void interviewerLoopbackSttPipeline.stop()
     }
   }, [])
 
@@ -60,6 +67,10 @@ export function OverlayRoot(): ReactElement {
 
   const refreshSttPipelineState = (): void => {
     setSttPipelineState(candidateMicSttPipeline.getState())
+  }
+
+  const refreshInterviewerSttPipelineState = (): void => {
+    setInterviewerSttPipelineState(interviewerLoopbackSttPipeline.getState())
   }
 
   const handleTranscript = (event: SttTranscriptEvent): void => {
@@ -85,6 +96,11 @@ export function OverlayRoot(): ReactElement {
   }
 
   const startSttPipeline = async (): Promise<void> => {
+    if (interviewerLoopbackSttPipeline.getState().running) {
+      await interviewerLoopbackSttPipeline.stop()
+      refreshInterviewerSttPipelineState()
+    }
+
     const result = await candidateMicSttPipeline.start({
       chunkMs: 250,
       sampleRate: 16000,
@@ -99,6 +115,39 @@ export function OverlayRoot(): ReactElement {
     await candidateMicSttPipeline.stop()
     refreshSttPipelineState()
     setSttMessage('STT送信を停止しました')
+  }
+
+  const handleInterviewerTranscript = (event: SttTranscriptEvent): void => {
+    setLatestTranscript(event.text)
+
+    if (event.isFinal && event.text.trim() !== '') {
+      setLatestInterviewerQuestion(event.text)
+    }
+  }
+
+  const startInterviewerSttPipeline = async (): Promise<void> => {
+    if (candidateMicSttPipeline.getState().running) {
+      await candidateMicSttPipeline.stop()
+      refreshSttPipelineState()
+    }
+
+    const result = await interviewerLoopbackSttPipeline.start({
+      chunkMs: 250,
+      language: 'ja-JP',
+      onTranscript: handleInterviewerTranscript
+    })
+    refreshInterviewerSttPipelineState()
+    setInterviewerSttMessage(
+      result.ok
+        ? `面接官STT送信中 (${result.sampleRate}Hz)`
+        : result.error.message
+    )
+  }
+
+  const stopInterviewerSttPipeline = async (): Promise<void> => {
+    await interviewerLoopbackSttPipeline.stop()
+    refreshInterviewerSttPipelineState()
+    setInterviewerSttMessage('面接官STT送信を停止しました')
   }
 
   const startCandidateFaceLoop = async (): Promise<void> => {
@@ -148,11 +197,14 @@ export function OverlayRoot(): ReactElement {
   const handleReset = async (): Promise<void> => {
     await faceAnalysisLoop.stopAll()
     await candidateMicSttPipeline.stop()
+    await interviewerLoopbackSttPipeline.stop()
     dominanceOrchestrator.reset()
     setCandidateFace(50)
     refreshFaceLoopState()
     refreshSttPipelineState()
+    refreshInterviewerSttPipelineState()
     setLatestTranscript('')
+    setLatestInterviewerQuestion('')
     finalTranscriptsRef.current = []
     setFillerSummary('')
     reset()
@@ -201,12 +253,23 @@ export function OverlayRoot(): ReactElement {
           ) : (
             <button onClick={() => void startSttPipeline()}>STT開始</button>
           )}
+          {interviewerSttPipelineState.running ? (
+            <button onClick={() => void stopInterviewerSttPipeline()}>面接官STT停止</button>
+          ) : (
+            <button onClick={() => void startInterviewerSttPipeline()}>面接官STT開始</button>
+          )}
           <button onClick={handleReset}>リセット</button>
         </div>
         {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
         {sttMessage ? <div style={styles.sttMessage}>{sttMessage}</div> : null}
+        {interviewerSttMessage ? (
+          <div style={styles.sttMessage}>{interviewerSttMessage}</div>
+        ) : null}
         {latestTranscript ? (
           <div style={styles.transcript}>STT: {latestTranscript}</div>
+        ) : null}
+        {latestInterviewerQuestion ? (
+          <div style={styles.transcript}>面接官質問: {latestInterviewerQuestion}</div>
         ) : null}
         {fillerSummary ? <div style={styles.sttMessage}>{fillerSummary}</div> : null}
         <ul style={styles.scores}>
@@ -216,7 +279,7 @@ export function OverlayRoot(): ReactElement {
             </li>
           ))}
         </ul>
-        <ResponseJudgePanel />
+        <ResponseJudgePanel questionDraft={latestInterviewerQuestion} />
       </div>
     </div>
   )

@@ -46,6 +46,12 @@ const api: AlloPreloadApi = {
         IPC_CHANNELS.captureDesktopSources,
         request
       ) as Promise<CaptureDesktopSourcesResult>
+    },
+    enableLoopbackAudio: async () => {
+      await ipcRenderer.invoke(IPC_CHANNELS.captureEnableLoopbackAudio)
+    },
+    disableLoopbackAudio: async () => {
+      await ipcRenderer.invoke(IPC_CHANNELS.captureDisableLoopbackAudio)
     }
   },
   overlay: {

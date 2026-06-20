@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   sttTranscript: 'stt:transcript',
   llmJudgeResponse: 'llm:judge-response',
   captureDesktopSources: 'capture:desktop-sources',
+  captureEnableLoopbackAudio: 'enable-loopback-audio',
+  captureDisableLoopbackAudio: 'disable-loopback-audio',
   overlaySetClickThrough: 'overlay:set-click-through'
 } as const
 
@@ -50,6 +52,8 @@ export interface AlloPreloadApi {
     listDesktopSources: (
       request?: CaptureDesktopSourcesRequest
     ) => Promise<CaptureDesktopSourcesResult>
+    enableLoopbackAudio: () => Promise<void>
+    disableLoopbackAudio: () => Promise<void>
   }
   overlay: {
     setClickThrough: (request: OverlaySetClickThroughRequest) => Promise<void>
