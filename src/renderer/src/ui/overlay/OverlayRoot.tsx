@@ -1,17 +1,23 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
+import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
 
 export function OverlayRoot(): ReactElement {
+  useInitialCandidatePortraitImage()
+
   const dominance = useDominanceStore((state) => state.dominance)
   const scores = useDominanceStore((state) => state.scores)
+  const candidatePortraitImageUrl = useDominanceStore(
+    (state) => state.portraitImageUrls.candidate
+  )
   const setDominance = useDominanceStore((state) => state.setDominance)
   const reset = useDominanceStore((state) => state.reset)
 
   return (
     <div style={styles.root}>
-      <DominanceClashBanner value={dominance} />
+      <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
       <div style={styles.content}>
         <div
           style={styles.controls}
