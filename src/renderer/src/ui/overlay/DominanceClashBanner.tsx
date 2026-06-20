@@ -105,6 +105,8 @@ export function DominanceClashBanner({
   }
   const leftPortraitSrc = candidatePortraitSrc ?? leftPortrait
   const rightPortraitSrc = interviewerPortraitSrc ?? rightPortrait
+  const isLeftPortraitCaptured = candidatePortraitSrc !== undefined
+  const isRightPortraitCaptured = interviewerPortraitSrc !== undefined
 
   return (
     <div
@@ -125,7 +127,9 @@ export function DominanceClashBanner({
       </div>
       <div className="clash-banner__portrait-mask clash-banner__portrait-mask--left">
         <img
-          className="clash-banner__portrait clash-banner__portrait--left"
+          className={`clash-banner__portrait clash-banner__portrait--left${
+            isLeftPortraitCaptured ? ' clash-banner__portrait--captured' : ''
+          }`}
           src={leftPortraitSrc}
           alt=""
           aria-hidden="true"
@@ -133,7 +137,9 @@ export function DominanceClashBanner({
       </div>
       <div className="clash-banner__portrait-mask clash-banner__portrait-mask--right">
         <img
-          className="clash-banner__portrait clash-banner__portrait--right"
+          className={`clash-banner__portrait clash-banner__portrait--right${
+            isRightPortraitCaptured ? ' clash-banner__portrait--captured' : ''
+          }`}
           src={rightPortraitSrc}
           alt=""
           aria-hidden="true"

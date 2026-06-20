@@ -12,6 +12,8 @@ export interface PortraitFrameOptions {
   landmarker?: FaceLandmarker
   faceCropPaddingRatio?: number
   faceDetectionTimeoutMs?: number
+  /** 撮影前にカメラの自動露出(AE)が収束するのを待つ時間(ms)。デフォルトは待たない(0)。 */
+  warmupMs?: number
 }
 
 const defaultPortraitFrameOptions = {
@@ -19,10 +21,22 @@ const defaultPortraitFrameOptions = {
   height: 256,
   mimeType: 'image/png',
   timeoutMs: 3000,
-  faceDetectionTimeoutMs: 1500
+  faceDetectionTimeoutMs: 1500,
+  warmupMs: 0
 } satisfies Required<
-  Pick<PortraitFrameOptions, 'width' | 'height' | 'mimeType' | 'timeoutMs' | 'faceDetectionTimeoutMs'>
+  Pick<
+    PortraitFrameOptions,
+    'width' | 'height' | 'mimeType' | 'timeoutMs' | 'faceDetectionTimeoutMs' | 'warmupMs'
+  >
 >
+
+/**
+ * カメラ起動直後は自動露出(AE)が収束していないため、画角に天井照明等の強い光源が
+ * 入っていると顔側が暗く落ちる(逆光)。就活生カメラはこの撮影のためだけに新規で
+ * getUserMedia するので、AEが安定するまで少し待ってから1枚を撮る。
+ * 画面共有(面接官側)には露出という概念が無いため適用しない。
+ */
+const candidateCameraWarmupMs = 800
 
 export async function captureCandidatePortraitImage(
   options: PortraitFrameOptions = {}
@@ -38,7 +52,10 @@ export async function captureCandidatePortraitImage(
   }
 
   try {
-    const imageUrl = await capturePortraitFrame(streamResult.stream, options)
+    const imageUrl = await capturePortraitFrame(streamResult.stream, {
+      ...options,
+      warmupMs: options.warmupMs ?? candidateCameraWarmupMs
+    })
     return { ok: true, stream: imageUrl }
   } catch (error) {
     return {
@@ -99,6 +116,7 @@ export async function capturePortraitFrame(
   const height = options.height ?? defaultPortraitFrameOptions.height
   const mimeType = options.mimeType ?? defaultPortraitFrameOptions.mimeType
   const timeoutMs = options.timeoutMs ?? defaultPortraitFrameOptions.timeoutMs
+  const warmupMs = options.warmupMs ?? defaultPortraitFrameOptions.warmupMs
 
   assertPositiveFiniteDimension(width, 'width')
   assertPositiveFiniteDimension(height, 'height')
@@ -110,6 +128,10 @@ export async function capturePortraitFrame(
 
   try {
     await waitForVideoFrame(video, timeoutMs)
+
+    if (warmupMs > 0) {
+      await delay(warmupMs)
+    }
 
     const canvas = document.createElement('canvas')
     canvas.width = width
@@ -335,4 +357,8 @@ function waitForNextFrame(): Promise<void> {
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => resolve())
   })
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
