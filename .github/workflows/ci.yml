@@ -20,11 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Setup mise (Node from mise.toml)
+        uses: jdx/mise-action@v2
 
       - name: Install dependencies
         run: npm ci
@@ -40,11 +37,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Setup mise (Node from mise.toml)
+        uses: jdx/mise-action@v2
 
       - name: Install dependencies
         run: npm ci
@@ -60,11 +54,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Setup mise (Node from mise.toml)
+        uses: jdx/mise-action@v2
 
       - name: Install dependencies
         run: npm ci
