@@ -19,6 +19,8 @@
   --clash-jitter: 0%;
   /* 立ち絵が境界線にぴったり寄ると左寄りに見えるため、両陣営とも中央寄り(右)に少しずらす */
   --portrait-shift: 16px;
+  /* 立ち絵を両陣営とも境界線(稲妻)側にさらに引き寄せ、衝突感を強める */
+  --portrait-overlap: 28px;
   /* 互角(50)から離れるほど1に近づき、中央の衝突エフェクトを強くする(Reactから渡される) */
   --dominance-intensity: 0;
   animation: clash-boundary-sway 0.7s ease-in-out infinite;
@@ -210,11 +212,11 @@
 }
 
 .clash-banner__portrait-mask--left {
-  right: calc(var(--right-width) - var(--clash-jitter) - var(--portrait-shift));
+  right: calc(var(--right-width) - var(--clash-jitter) - var(--portrait-shift) - var(--portrait-overlap));
 }
 
 .clash-banner__portrait-mask--right {
-  left: calc(var(--left-width) + var(--clash-jitter) + var(--portrait-shift));
+  left: calc(var(--left-width) + var(--clash-jitter) + var(--portrait-shift) - var(--portrait-overlap));
 }
 
 .clash-banner__portrait {
