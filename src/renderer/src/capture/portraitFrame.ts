@@ -62,6 +62,9 @@ export async function capturePortraitFrame(
   const mimeType = options.mimeType ?? defaultPortraitFrameOptions.mimeType
   const timeoutMs = options.timeoutMs ?? defaultPortraitFrameOptions.timeoutMs
 
+  assertPositiveFiniteDimension(width, 'width')
+  assertPositiveFiniteDimension(height, 'height')
+
   const video = document.createElement('video')
   video.muted = true
   video.playsInline = true
@@ -273,6 +276,12 @@ function drawCoverFrame(
 function stopMediaStream(stream: MediaStream): void {
   for (const track of stream.getTracks()) {
     track.stop()
+  }
+}
+
+function assertPositiveFiniteDimension(value: number, name: 'width' | 'height'): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`顔画像の${name}には正の有限値を指定してください`)
   }
 }
 

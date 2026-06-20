@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateFaceCropBox } from './portraitFrame'
+import { calculateFaceCropBox, capturePortraitFrame } from './portraitFrame'
 import type { NormalizedFaceLandmark } from '../analysis/face/faceLandmarker'
 
 describe('calculateFaceCropBox', () => {
@@ -47,6 +47,17 @@ describe('calculateFaceCropBox', () => {
 
   it('returns null when landmarks are empty', () => {
     expect(calculateFaceCropBox([], 400, 400)).toBeNull()
+  })
+})
+
+describe('capturePortraitFrame', () => {
+  it.each([
+    ['width', { width: 0 }],
+    ['height', { height: Number.NaN }]
+  ])('rejects invalid %s before rendering', async (_name, options) => {
+    await expect(
+      capturePortraitFrame({} as MediaStream, options)
+    ).rejects.toThrow('正の有限値')
   })
 })
 

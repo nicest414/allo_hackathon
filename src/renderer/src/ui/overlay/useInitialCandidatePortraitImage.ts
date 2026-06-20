@@ -18,11 +18,15 @@ export function useInitialCandidatePortraitImage(): void {
 
     let cancelled = false
 
-    void getInitialCandidatePortraitImage().then((imageUrl) => {
-      if (!cancelled && imageUrl !== undefined) {
-        setCandidatePortraitImageUrl(imageUrl)
-      }
-    })
+    void getInitialCandidatePortraitImage()
+      .then((imageUrl) => {
+        if (!cancelled && imageUrl !== undefined) {
+          setCandidatePortraitImageUrl(imageUrl)
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn('Failed to initialize candidate portrait image', error)
+      })
 
     return () => {
       cancelled = true
