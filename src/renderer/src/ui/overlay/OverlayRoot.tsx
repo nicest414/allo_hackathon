@@ -2,6 +2,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
+import { ResponseJudgePanel } from './ResponseJudgePanel'
 
 export function OverlayRoot(): ReactElement {
   useInitialCandidatePortraitImage()
@@ -34,6 +35,7 @@ export function OverlayRoot(): ReactElement {
             </li>
           ))}
         </ul>
+        <ResponseJudgePanel />
       </div>
     </div>
   )
