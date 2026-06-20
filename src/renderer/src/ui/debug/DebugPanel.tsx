@@ -10,7 +10,9 @@ export function DebugPanel() {
     scores,
     setScores,
     dominance,
-    triggerCutin
+    triggerCutin,
+    logs,
+    clearLogs
   } = useDominanceStore()
 
   const handleSliderChange = (key: keyof typeof scores, value: number) => {
@@ -109,8 +111,28 @@ export function DebugPanel() {
               </button>
             </div>
           </div>
+
+          <div className="debug-panel__section">
+            <div className="debug-panel__section-header">
+              <h4>Real-time Console Logs</h4>
+              <button className="debug-panel__clear-btn" onClick={clearLogs}>Clear</button>
+            </div>
+            <div className="debug-panel__log-console">
+              {logs.length === 0 ? (
+                <div className="debug-panel__log-empty">No logs recorded yet.</div>
+              ) : (
+                logs.map((log) => (
+                  <div key={log.id} className={`debug-panel__log-line debug-panel__log-line--${log.type}`}>
+                    <span className="debug-panel__log-time">[{log.timestamp}]</span>{' '}
+                    <span className="debug-panel__log-msg">{log.message}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
+

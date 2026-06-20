@@ -17,6 +17,13 @@ export interface PortraitImageUrls {
   candidate?: string
 }
 
+export interface LogEntry {
+  id: string
+  timestamp: string
+  message: string
+  type: 'info' | 'warn' | 'success' | 'error'
+}
+
 interface DominanceState {
   /** リアルタイム4項目だけで算出した基礎優勢度（LLM補正前） */
   baseDominance: number
@@ -26,6 +33,9 @@ interface DominanceState {
   portraitImageUrls: PortraitImageUrls
   mockMode: boolean
   activeCutin: 'dominance' | 'deficit' | null
+  logs: LogEntry[]
+  addLog: (message: string, type?: LogEntry['type']) => void
+  clearLogs: () => void
   setMockMode: (enabled: boolean) => void
   setDominance: (dominance: number) => void
   setScores: (scores: Partial<DominanceScores>, force?: boolean) => void
@@ -75,7 +85,24 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
   portraitImageUrls: {},
   mockMode: false,
   activeCutin: null,
-  setMockMode: (mockMode) => set({ mockMode }),
+  logs: [],
+  addLog: (message, type = 'info') =>
+    set((state) => {
+      const now = new Date()
+      const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`
+      const newEntry: LogEntry = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp,
+        message,
+        type
+      }
+      return { logs: [newEntry, ...state.logs].slice(0, 50) } // 最大50件保持
+    }),
+  clearLogs: () => set({ logs: [] }),
+  setMockMode: (mockMode) => {
+    set({ mockMode })
+    useDominanceStore.getState().addLog(`Mock Mode: ${mockMode ? 'ENABLED (Sensors Ignored)' : 'DISABLED'}`, 'info')
+  },
   setDominance: (dominance) => set({ dominance: clamp(dominance) }),
   setScores: (partialScores, force = false) =>
     set((state) => {
@@ -86,14 +113,22 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
 
       const next = { ...state.scores }
       let accumulatedResponseScore = state.accumulatedResponseScore
+      const store = useDominanceStore.getState()
 
       for (const key of Object.keys(partialScores) as Array<keyof DominanceScores>) {
         const value = partialScores[key]
         if (value !== undefined) {
-          next[key] =
-            key === 'response'
-              ? accumulateResponseScore(accumulatedResponseScore, value)
-              : clamp(value)
+          const clampedValue = key === 'response'
+            ? accumulateResponseScore(accumulatedResponseScore, value)
+            : clamp(value)
+          
+          if (next[key] !== clampedValue) {
+            // スコア変化を検知して自動ログ
+            const logType = key === 'filler' ? 'warn' : key === 'response' ? 'success' : 'info'
+            store.addLog(`[Score Update] ${key}: ${clampedValue} (was ${next[key]})`, logType)
+          }
+
+          next[key] = clampedValue
 
           if (key === 'response') {
             accumulatedResponseScore = next.response
@@ -101,7 +136,13 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
         }
       }
 
-      return { scores: next, accumulatedResponseScore, ...calculateDominanceState(next) }
+      const calculated = calculateDominanceState(next)
+      
+      if (state.dominance !== calculated.dominance) {
+        store.addLog(`[Overall Dominance] ${calculated.dominance} (was ${state.dominance})`, 'info')
+      }
+
+      return { scores: next, accumulatedResponseScore, ...calculated }
     }),
   setCandidatePortraitImageUrl: (url) =>
     set((state) => ({
@@ -110,15 +151,26 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
         candidate: url
       }
     })),
-  triggerCutin: (type) => set({ activeCutin: type }),
+  triggerCutin: (type) => {
+    set({ activeCutin: type })
+    const store = useDominanceStore.getState()
+    const logType = type === 'dominance' ? 'success' : 'error'
+    const msg = type === 'dominance' 
+      ? '🔥 限界突破！優勢カットイン発動 (異議あり！)' 
+      : '⚠️ 危機的状況！劣勢カットイン発動'
+    store.addLog(msg, logType)
+  },
   clearCutin: () => set({ activeCutin: null }),
-  reset: () =>
+  reset: () => {
     set({
       accumulatedResponseScore: undefined,
       baseDominance: initialDominance,
       dominance: initialDominance,
       scores: initialScores,
       mockMode: false,
-      activeCutin: null
+      activeCutin: null,
+      logs: []
     })
+    useDominanceStore.getState().addLog('System State Reset.', 'info')
+  }
 }))
