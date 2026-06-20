@@ -14,6 +14,8 @@
    * --left-width/--right-width はReact側から渡される実際の優勢度。
    */
   --clash-jitter: 0%;
+  /* 立ち絵が境界線にぴったり寄ると左寄りに見えるため、両陣営とも中央寄り(右)に少しずらす */
+  --portrait-shift: 24px;
   animation: clash-boundary-sway 0.7s ease-in-out infinite;
 }
 
@@ -178,12 +180,12 @@
 }
 
 .clash-banner__portrait--left {
-  right: calc(var(--right-width) - var(--clash-jitter));
+  right: calc(var(--right-width) - var(--clash-jitter) - var(--portrait-shift));
   object-position: right bottom;
 }
 
 .clash-banner__portrait--right {
-  left: calc(var(--left-width) + var(--clash-jitter));
+  left: calc(var(--left-width) + var(--clash-jitter) + var(--portrait-shift));
   object-position: left bottom;
 }
 
