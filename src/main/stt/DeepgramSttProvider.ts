@@ -2,29 +2,87 @@ import type { TranscriptSegment } from '../../shared/types/analysis'
 import type { SttStartRequest } from '../../shared/types/ipc'
 import type { SttProvider, SttTranscriptListener } from './SttProvider'
 
-const DUMMY_TRANSCRIPT_DELAY_MS = 500
+const DEEPGRAM_WS_BASE = 'wss://api.deepgram.com/v1/listen'
+// 無音時のアイドル切断を防ぐためのKeepAlive送信間隔。
+const KEEPALIVE_INTERVAL_MS = 8_000
 
 /**
- * Deepgram streaming STTのスタブ実装。実APIへの接続は行わず、
- * start()後にダミーのtranscriptを1件流してIPCの流れを確認できるようにする。
+ * Deepgram streaming STTの実装。Node 22のglobal WebSocketで接続する（依存追加なし）。
+ * 認証はDeepgramのサブプロトコル方式（['token', apiKey]）を使う。
+ *
+ * punctuate=false / smart_format=false にして「えっと」等のフィラーを整形させず、
+ * 生に近い文字起こしを得る（フィラー検出の入力源にするため）。
+ * 接続確立前に届いた音声chunkはキューに退避し、open後にまとめて送る。
  */
 export class DeepgramSttProvider implements SttProvider {
   private readonly listeners = new Set<SttTranscriptListener>()
-  private dummyTimer: ReturnType<typeof setTimeout> | undefined
+  private readonly pendingChunks: ArrayBuffer[] = []
+  private ws: WebSocket | undefined
+  private open = false
+  private keepAliveTimer: ReturnType<typeof setInterval> | undefined
 
-  async start(_request: SttStartRequest): Promise<void> {
-    this.dummyTimer = setTimeout(() => this.emitDummyTranscript(), DUMMY_TRANSCRIPT_DELAY_MS)
+  constructor(private readonly apiKey: string) {}
+
+  async start(request: SttStartRequest): Promise<void> {
+    const params = new URLSearchParams({
+      model: 'nova-2',
+      language: request.language ?? 'ja',
+      encoding: 'linear16',
+      sample_rate: String(request.sampleRate),
+      channels: '1',
+      interim_results: 'true',
+      punctuate: 'false',
+      smart_format: 'false'
+    })
+
+    const ws = new WebSocket(`${DEEPGRAM_WS_BASE}?${params.toString()}`, ['token', this.apiKey])
+    this.ws = ws
+
+    ws.addEventListener('open', () => {
+      this.open = true
+      this.flushPendingChunks()
+      this.startKeepAlive()
+    })
+    ws.addEventListener('message', (event: MessageEvent) => {
+      this.handleMessage(event.data)
+    })
+    ws.addEventListener('error', () => {
+      // 接続エラーでlistenerを壊さない。鍵やヘッダはログに出さない。
+      console.warn('[stt] Deepgram WebSocket error')
+    })
+    ws.addEventListener('close', () => {
+      this.open = false
+      this.stopKeepAlive()
+    })
   }
 
   async stop(): Promise<void> {
-    if (this.dummyTimer) {
-      clearTimeout(this.dummyTimer)
-      this.dummyTimer = undefined
+    this.stopKeepAlive()
+    this.pendingChunks.length = 0
+
+    const ws = this.ws
+    this.ws = undefined
+    this.open = false
+
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'CloseStream' }))
+        } catch {
+          // 送信失敗は無視してcloseに進む
+        }
+      }
+      ws.close()
     }
   }
 
-  async sendAudioChunk(_chunk: ArrayBuffer): Promise<void> {
-    // 実APIへのstreaming音声送信は別issueで実装する
+  async sendAudioChunk(chunk: ArrayBuffer): Promise<void> {
+    if (this.ws && this.open && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(chunk)
+    } else {
+      // 接続確立前のchunkは退避し、open後に順序を保って送る。
+      this.pendingChunks.push(chunk)
+    }
   }
 
   onTranscript(listener: SttTranscriptListener): () => void {
@@ -34,15 +92,70 @@ export class DeepgramSttProvider implements SttProvider {
     }
   }
 
-  private emitDummyTranscript(): void {
+  private flushPendingChunks(): void {
+    if (!this.ws) {
+      return
+    }
+    for (const chunk of this.pendingChunks) {
+      this.ws.send(chunk)
+    }
+    this.pendingChunks.length = 0
+  }
+
+  private startKeepAlive(): void {
+    this.stopKeepAlive()
+    this.keepAliveTimer = setInterval(() => {
+      if (this.ws && this.open && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'KeepAlive' }))
+      }
+    }, KEEPALIVE_INTERVAL_MS)
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer)
+      this.keepAliveTimer = undefined
+    }
+  }
+
+  private handleMessage(data: unknown): void {
+    if (typeof data !== 'string') {
+      return
+    }
+
+    let message: DeepgramMessage
+    try {
+      message = JSON.parse(data) as DeepgramMessage
+    } catch {
+      return
+    }
+
+    // Results以外（Metadata / UtteranceEnd 等）は無視する
+    if (message.type !== undefined && message.type !== 'Results') {
+      return
+    }
+
+    const text = message.channel?.alternatives?.[0]?.transcript
+    if (!text) {
+      return
+    }
+
     const segment: TranscriptSegment = {
       timestamp: Date.now(),
-      text: '（Deepgramスタブ）ダミーの文字起こしです',
-      isFinal: true
+      text,
+      isFinal: Boolean(message.is_final)
     }
 
     for (const listener of this.listeners) {
       listener(segment)
     }
+  }
+}
+
+interface DeepgramMessage {
+  type?: string
+  is_final?: boolean
+  channel?: {
+    alternatives?: Array<{ transcript?: string }>
   }
 }
