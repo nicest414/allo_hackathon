@@ -6,6 +6,9 @@ out/
 # 動画素材作成時の生/中間ファイル（コード上未参照、サイズが大きいため追跡しない）
 src/renderer/src/assets/video/*.mov
 
+# MediaPipeのWASM（node_modulesからelectron.vite.config.tsが起動/ビルド時に自動コピー。約32MBのため追跡しない）
+src/renderer/public/mediapipe/
+
 # mise のローカル上書き設定（個人用・共有しない）
 mise.local.toml
 .mise.local.toml

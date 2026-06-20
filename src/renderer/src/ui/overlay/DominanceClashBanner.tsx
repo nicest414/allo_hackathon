@@ -91,11 +91,13 @@ export function DominanceClashBanner({
   interviewerPortraitSrc
 }: DominanceClashBannerProps): ReactElement {
   const clamped = Math.min(100, Math.max(0, Math.round(value)))
-  const leftWidth = 100 - clamped
-  const rightWidth = clamped
+  // value(優勢度)は100=候補者(You/左)が完全優勢、0=面接官(相手/右)が完全優勢
+  // (dominanceCalculatorのテスト参照)。Youは左側なので、優勢度が高いほど左ゾーンを広げる。
+  const leftWidth = clamped
+  const rightWidth = 100 - clamped
   // 互角(50)から離れるほど一方的な展開とみなし、中央の衝突エフェクトを強くする
   const dominanceIntensity = Math.abs(clamped - 50) / 50
-  const leadingSide = clamped === 50 ? null : clamped > 50 ? 'right' : 'left'
+  const leadingSide = clamped === 50 ? null : clamped > 50 ? 'left' : 'right'
   // 境界線の位置は --left-width/--right-width で渡し、実際の表示位置は
   // CSS側で僅かなにじり(--clash-jitter)を加えて計算する。数値表示(clamped)はにじりの影響を受けない。
   const boundaryVars: ClashBannerStyle = {

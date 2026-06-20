@@ -339,8 +339,8 @@ export function OverlayRoot(): ReactElement {
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
-          <button onClick={() => setDominance(dominance - 10)}>You -10</button>
-          <button onClick={() => setDominance(dominance + 10)}>相手 +10</button>
+          <button onClick={() => setDominance(dominance - 10)}>相手 +10</button>
+          <button onClick={() => setDominance(dominance + 10)}>You +10</button>
           <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
           <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
           {faceLoopState.candidate ? (
