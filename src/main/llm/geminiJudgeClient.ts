@@ -5,8 +5,9 @@ import { RESPONSE_JUDGMENT_SCHEMA } from './responseSchema'
 /**
  * 返答内容判定に使うGemini Flashモデル。
  * SDKは依存バージョンで仕様が変わりやすいため、ここではREST APIを直接叩く。
+ * gemini-2.0-flash は提供終了（generateContentが404）のため、安定版の 2.5-flash を使用。
  */
-const GEMINI_FLASH_MODEL = 'gemini-2.0-flash'
+const GEMINI_FLASH_MODEL = 'gemini-2.5-flash'
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 // リアルタイム用途のため、応答が無い場合は打ち切る（IPCの無期限ハング防止）
 const REQUEST_TIMEOUT_MS = 10_000
