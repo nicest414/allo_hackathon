@@ -12,7 +12,24 @@
 - `npm run typecheck` — `tsc --noEmit`（node 用 / web 用の 2 系統）
 - `npm test` — vitest 実行
 
-`src/` 配下は機能ごとに実装が進行中（一部は空ファイル/スタブのまま）。新規ファイルを追加する際は下記「ディレクトリ構成」の責務分離を守ること。
+新規ファイルを追加する際は下記「ディレクトリ構成」の責務分離を守ること。`src/` 配下の実装状況は以下のとおり。
+
+### 実装済み（多くは単体テストあり）
+
+- `src/main/llm/` — Gemini Flash 判定クライアント（REST 呼び出し。`GEMINI_API_KEY` 未設定時は実APIを呼ばずスタブ結果を返す）+ `responseSchema`
+- `src/main/stt/` — `SttProvider` インターフェースと `createSttProvider` ファクトリ（後述のとおり provider 実体は**ダミー**）
+- `src/main/ipc/`・`src/main/env.ts`・`src/main/audio/`・`src/main/windows/` — STT/LLM の IPC ハンドラ、`.env` 読込、ループバック有効化、オーバーレイ Window 生成
+- `src/renderer/src/domain/scoring/` — 優勢度計算の pure TS 層（`faceScore` / `voiceScore` / `fillerDetector` / `responseScore` / `dominanceCalculator`）
+- `src/renderer/src/analysis/face/`・`analysis/voice/` — 顔・声の特徴量抽出ラッパー
+- `src/renderer/src/capture/` — `getUserMedia` 等の生メディア取得ラッパー
+- `src/renderer/src/ui/`・`store/` — オーバーレイ UI と Zustand 状態管理
+
+### 未実装・要注意（古い前提で実装を進めないこと）
+
+- **実行時の結線（オーケストレーション層）が存在しない**：capture → 解析 → store 更新 → LLM 呼び出しというパイプラインを起動するコードが無い。`App.tsx` は `OverlayRoot` を描画するだけで、解析は走らない。各モジュールは個別には動く／テスト済みだが、まだ繋がっていない。
+- **STT provider は実APIに未接続のダミー**：`DeepgramSttProvider` / `GeminiLiveSttProvider` は `start()` 後にダミーの transcript を 1 件流すのみで、`sendAudioChunk()` は no-op。
+- **`voiceAnalyzer` の生サンプルからのピッチ抽出が未実装**：`pitchVariation` は 0 を返す（外部から特徴量を渡した経路のみ値が反映される）。
+- **LLM 判定による優勢度の補正アルゴリズムは未実装**（issue #33）。
 
 ## ブランチ運用
 
@@ -50,8 +67,10 @@ git 管理された共有設定でチーム全員の挙動を揃えている。
 
 ## 未確定・要検討事項（README.mdより）
 
-- STT: Deepgram streaming vs Gemini Live STTの最終決定
-- 顔の焦り度・笑顔度、声の焦りのスコアリングロジック設計
-- 優勢度（0〜100）の重み付け合成ロジック
+- STT: Deepgram streaming vs Gemini Live STTの最終決定。決定後、ダミーの STT provider を実API接続に差し替える
+- 各モジュールを繋ぐオーケストレーション層（capture → 解析 → store → LLM）の実装
+- LLM 判定による優勢度の補正アルゴリズム設計・実装（issue #33）
+- 顔の焦り度・笑顔度、声の焦りのスコアリングロジックの精度向上（`voiceAnalyzer` のピッチ抽出を含む）
+- 優勢度（0〜100）の重み付け合成ロジックの調整
 - カットインが入る「振り切れた」条件の定義
 - Windows対応時の音声ループバック実装（`electron-audio-loopback`のScreenCaptureKit部分はmacOS専用）
