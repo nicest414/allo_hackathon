@@ -11,6 +11,7 @@ import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { ResponseJudgePanel } from './ResponseJudgePanel'
+import { DebugPanel } from '../debug/DebugPanel'
 
 const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
@@ -26,6 +27,7 @@ export function OverlayRoot(): ReactElement {
   const setScores = useDominanceStore((state) => state.setScores)
   const setDominance = useDominanceStore((state) => state.setDominance)
   const reset = useDominanceStore((state) => state.reset)
+  const addLog = useDominanceStore((state) => state.addLog)
 
   // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
   // オーケストレーター経由の再計算→ゲージ反映を確認できるようにする。
@@ -71,12 +73,19 @@ export function OverlayRoot(): ReactElement {
       return
     }
 
+    addLog(`[STT Final] "${event.text}"`, 'info')
+
     finalTranscriptsRef.current = [
       ...finalTranscriptsRef.current,
       { timestamp: Date.now(), text: event.text, isFinal: true }
     ]
     const result = detectFillers(finalTranscriptsRef.current)
     setScores({ filler: result.score })
+    
+    if (result.fillerCount > 0) {
+      addLog(`⚠️ フィラー検出！ 「${result.matchedFillers.join('・')}」 (累計 ${result.fillerCount}回)`, 'warn')
+    }
+
     setFillerSummary(
       result.fillerCount > 0
         ? `フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
@@ -161,6 +170,7 @@ export function OverlayRoot(): ReactElement {
   return (
     <div style={styles.root}>
       <DominanceClashBanner value={dominance} candidatePortraitSrc={candidatePortraitImageUrl} />
+      <DebugPanel />
       <div style={styles.content}>
         <div style={styles.values}>
           優勢度: {dominance}（基礎: {baseDominance}）
