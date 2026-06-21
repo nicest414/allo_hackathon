@@ -19,6 +19,14 @@ import {
   captureAndStoreInterviewerPortrait
 } from '../../services/portraitCaptureService'
 import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fillerDetector'
+import {
+  calculateTalkRatio,
+  DEFAULT_TALK_RATIO_WINDOW_MS
+} from '../../domain/scoring/talkRatioScore'
+import {
+  calculateBaseDominance,
+  BASE_DOMINANCE_WEIGHTS
+} from '../../domain/scoring/dominanceCalculator'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { ManualFaceRegionDialog } from './ManualFaceRegionDialog'
@@ -63,6 +71,8 @@ export function OverlayRoot(): ReactElement {
   const [interviewerSttMessage, setInterviewerSttMessage] = useState('')
   // フィラー検出は確定(final)transcriptの蓄積に対して行うため、最新配列をrefで保持する。
   const finalTranscriptsRef = useRef<TranscriptSegment[]>([])
+  // 発話時間比（talkRatio）の算出に使う面接官側の確定transcript。
+  const finalInterviewerTranscriptsRef = useRef<TranscriptSegment[]>([])
   const [voiceLoopState, setVoiceLoopState] = useState(voiceAnalysisLoop.getState())
   const [voiceLoopMessage, setVoiceLoopMessage] = useState('')
   // 表情スコアロジックの生値はターミナルログ用に保持するのみで、画面には出さない。
@@ -195,9 +205,22 @@ export function OverlayRoot(): ReactElement {
       return
     }
     const intervalId = setInterval(() => {
-      const { scores } = useDominanceStore.getState()
+      const { scores, baseDominance, dominance } = useDominanceStore.getState()
       console.log(
-        `[scores] candidateFace=${scores.candidateFace} interviewerFace=${scores.interviewerFace} voice=${scores.voice} filler=${scores.filler} response=${scores.response}`
+        `[scores] candidateFace=${scores.candidateFace} interviewerFace=${scores.interviewerFace} voice=${scores.voice} filler=${scores.filler} talkRatio=${scores.talkRatio} response=${scores.response} | base=${baseDominance.toFixed(1)} dominance=${dominance.toFixed(1)}`
+      )
+      // 各項目が最終スコアに何点分効いているか（重み適用後の寄与点）をログに出す。
+      // ログ専用の再計算なのでStoreの値は変えない。
+      const base = calculateBaseDominance({
+        timestamp: Date.now(),
+        candidateFace: { subject: 'candidate', value: scores.candidateFace },
+        interviewerFace: { subject: 'interviewer', value: scores.interviewerFace },
+        voice: { value: scores.voice },
+        filler: { matchedFillers: [], fillerCount: 0, score: scores.filler },
+        talkRatio: { candidateChars: 0, interviewerChars: 0, value: scores.talkRatio }
+      })
+      console.log(
+        `[weights] candidateFace=${(base.breakdown.candidateFace * BASE_DOMINANCE_WEIGHTS.candidateFace).toFixed(1)} interviewerFace=${(base.breakdown.interviewerFace * BASE_DOMINANCE_WEIGHTS.interviewerFace).toFixed(1)} voice=${(base.breakdown.voice * BASE_DOMINANCE_WEIGHTS.voice).toFixed(1)} filler=${(base.breakdown.filler * BASE_DOMINANCE_WEIGHTS.filler).toFixed(1)} talkRatio=${(base.breakdown.talkRatio * BASE_DOMINANCE_WEIGHTS.talkRatio).toFixed(1)}`
       )
       const cf = candidateFaceDebugRef.current
       if (cf) {
@@ -233,9 +256,44 @@ export function OverlayRoot(): ReactElement {
     )
   }, [setScores])
 
+  // 直近 windowMs 内の双方の発話文字数比から「話している量で場を支配している度合い」を
+  // 再評価し、Storeへ反映する（表情解釈より客観的な優劣シグナルの補助項目）。
+  const recomputeTalkRatio = useCallback((): void => {
+    const cutoff = Date.now() - DEFAULT_TALK_RATIO_WINDOW_MS
+    finalInterviewerTranscriptsRef.current = finalInterviewerTranscriptsRef.current.filter(
+      (segment) => segment.timestamp >= cutoff
+    )
+    const result = calculateTalkRatio(
+      finalTranscriptsRef.current,
+      finalInterviewerTranscriptsRef.current,
+      { windowMs: DEFAULT_TALK_RATIO_WINDOW_MS }
+    )
+    setScores({ talkRatio: result.value })
+
+    // 0/100に飽和した際、「本当の沈黙」か「直近発話がウィンドウから抜けただけ」かを
+    // 切り分けられるよう、各側の最終発話からの経過秒数も併記する。
+    const now = Date.now()
+    const lastCandidateAt =
+      finalTranscriptsRef.current[finalTranscriptsRef.current.length - 1]?.timestamp
+    const lastInterviewerAt =
+      finalInterviewerTranscriptsRef.current[finalInterviewerTranscriptsRef.current.length - 1]
+        ?.timestamp
+    const candidateAgeSec =
+      lastCandidateAt !== undefined ? ((now - lastCandidateAt) / 1000).toFixed(1) : '-'
+    const interviewerAgeSec =
+      lastInterviewerAt !== undefined ? ((now - lastInterviewerAt) / 1000).toFixed(1) : '-'
+
+    console.log(
+      `[talkRatio] candidate=${result.candidateChars}字(最終発話${candidateAgeSec}秒前) interviewer=${result.interviewerChars}字(最終発話${interviewerAgeSec}秒前) / score ${result.value}`
+    )
+  }, [setScores])
+
   useEffect(() => {
-    // 新規transcriptが来なくても定期的に再評価し、時間経過でフィラースコアを減衰させる。
-    const intervalId = setInterval(recomputeFiller, 1000)
+    // 新規transcriptが来なくても定期的に再評価し、時間経過でフィラー/発話比スコアを減衰させる。
+    const intervalId = setInterval(() => {
+      recomputeFiller()
+      recomputeTalkRatio()
+    }, 1000)
     return () => {
       clearInterval(intervalId)
       void faceAnalysisLoop.stopAll()
@@ -243,7 +301,7 @@ export function OverlayRoot(): ReactElement {
       void candidateMicSttPipeline.stop()
       void interviewerLoopbackSttPipeline.stop()
     }
-  }, [recomputeFiller])
+  }, [recomputeFiller, recomputeTalkRatio])
 
   // 手動範囲指定ダイアログはドラッグ操作を伴うため、ホバー時だけでなく開いている間は
   // 常時クリックスルーをOFFにする（ホバーが外れた瞬間に裏のアプリへクリックが漏れてドラッグが
@@ -278,6 +336,7 @@ export function OverlayRoot(): ReactElement {
       { timestamp: Date.now(), text: event.text, isFinal: true }
     ]
     recomputeFiller()
+    recomputeTalkRatio()
 
     // 自動判定ON時：就活生の確定発話を「回答」として渡す（沈黙検知で自動判定）。
     auto.reportAnswer(event.text)
@@ -333,6 +392,14 @@ export function OverlayRoot(): ReactElement {
     // 就活生STTと同時に動くため、面接官は「面接官質問」行のみ更新する（STT:行は就活生用）。
     if (event.isFinal && event.text.trim() !== '') {
       console.log(`[transcript] 面接官質問: ${event.text}`)
+
+      // talkRatio（発話時間比）算出用に面接官側の確定transcriptも蓄積する。
+      finalInterviewerTranscriptsRef.current = [
+        ...finalInterviewerTranscriptsRef.current,
+        { timestamp: Date.now(), text: event.text, isFinal: true }
+      ]
+      recomputeTalkRatio()
+
       // 自動判定ON時：面接官の確定発話を「質問」として渡す（新ターン開始）。
       auto.reportQuestion(event.text)
     }

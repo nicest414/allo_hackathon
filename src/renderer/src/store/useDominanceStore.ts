@@ -11,6 +11,7 @@ export interface DominanceScores {
   interviewerFace: number
   voice: number
   filler: number
+  talkRatio: number
   response: number
 }
 
@@ -63,6 +64,7 @@ const initialScores: DominanceScores = {
   interviewerFace: 50,
   voice: 50,
   filler: 50,
+  talkRatio: 50,
   response: 50
 }
 
@@ -75,6 +77,7 @@ function calculateDominanceState(
     interviewerFace: { subject: 'interviewer', value: scores.interviewerFace } as const,
     voice: { value: scores.voice },
     filler: { matchedFillers: [], fillerCount: 0, score: scores.filler },
+    talkRatio: { candidateChars: 0, interviewerChars: 0, value: scores.talkRatio },
     response: scores.response
   }
   const base = calculateBaseDominance(input)

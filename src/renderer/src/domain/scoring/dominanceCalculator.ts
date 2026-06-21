@@ -3,16 +3,17 @@ import type {
   DominanceScoreBreakdown,
   FaceScore,
   FillerDetectionResult,
+  TalkRatioScore,
   VoiceScore
 } from '../../../../shared/types/analysis'
 
 /**
  * 優勢度は二段階で求める:
- *   1) リアルタイム4項目（候補者顔/面接官顔/声/フィラー）から「基礎優勢度」を粗く算出
+ *   1) リアルタイム5項目（候補者顔/面接官顔/声/フィラー/発話時間比）から「基礎優勢度」を粗く算出
  *   2) LLM返答判定が届いたら、その結果で基礎優勢度を「補正」する
  *
  * 補正は重み付け再合成ではなく delta 方式を採用した。返答内容スコアの中立(50)からの
- * 差分に影響度を掛けて基礎優勢度へ加算する。これにより、LLM未到達の間も4項目だけで
+ * 差分に影響度を掛けて基礎優勢度へ加算する。これにより、LLM未到達の間も5項目だけで
  * 優劣が動き、LLMは「上振れ/下振れさせる補正」として効く（並列加重平均では二段階に
  * ならず、LLM未到達時の中立50埋めが常時平均へ混ざってしまうため）。
  */
@@ -23,14 +24,20 @@ export interface BaseDominanceInput {
   interviewerFace: FaceScore
   voice: VoiceScore
   filler: FillerDetectionResult
+  talkRatio: TalkRatioScore
 }
 
-/** リアルタイム4項目の重み（合計1）。実データに合わせて調整できるよう定数化。 */
+/**
+ * リアルタイム5項目の重み（合計1）。実データに合わせて調整できるよう定数化。
+ * interviewerFaceは「面接官が穏やか＝就活生優勢」という仮定が弱く外れやすいため低めに、
+ * talkRatioは表情解釈より客観的な発話量シグナルのため高めに振っている。
+ */
 export const BASE_DOMINANCE_WEIGHTS = {
-  candidateFace: 0.4,
-  interviewerFace: 0.2,
-  voice: 0.25,
-  filler: 0.15
+  candidateFace: 0.3,
+  interviewerFace: 0.1,
+  voice: 0.2,
+  filler: 0.15,
+  talkRatio: 0.25
 } as const
 
 /** 返答内容スコアの中立値。これより上なら加点、下なら減点の補正になる。 */
@@ -56,22 +63,25 @@ export interface BaseDominance {
 }
 
 /**
- * 第1段階: リアルタイム4項目から基礎優勢度を算出する。
+ * 第1段階: リアルタイム5項目から基礎優勢度を算出する。
  * voice/fillerは値が大きいほど「焦り・フィラーが多い」ので100から引いて反転させる。
+ * talkRatioは値が大きいほど「就活生が話している量が多い」ので反転させずそのまま使う。
  */
 export function calculateBaseDominance(input: BaseDominanceInput): BaseDominance {
   const breakdown: BaseDominanceBreakdown = {
     candidateFace: clamp(input.candidateFace.value),
     interviewerFace: clamp(input.interviewerFace.value),
     voice: clamp(100 - input.voice.value),
-    filler: clamp(100 - input.filler.score)
+    filler: clamp(100 - input.filler.score),
+    talkRatio: clamp(input.talkRatio.value)
   }
 
   const value = clamp(
     breakdown.candidateFace * BASE_DOMINANCE_WEIGHTS.candidateFace +
       breakdown.interviewerFace * BASE_DOMINANCE_WEIGHTS.interviewerFace +
       breakdown.voice * BASE_DOMINANCE_WEIGHTS.voice +
-      breakdown.filler * BASE_DOMINANCE_WEIGHTS.filler
+      breakdown.filler * BASE_DOMINANCE_WEIGHTS.filler +
+      breakdown.talkRatio * BASE_DOMINANCE_WEIGHTS.talkRatio
   )
 
   return { timestamp: input.timestamp, value, breakdown }

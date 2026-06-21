@@ -44,6 +44,14 @@ export interface FillerDetectionResult {
   score: number // 0-100
 }
 
+// ===== 発話時間比（就活生/面接官どちらが場を話しているか） =====
+
+export interface TalkRatioScore {
+  candidateChars: number
+  interviewerChars: number
+  value: number // 0-100 就活生の発話量シェア（高いほど就活生が場を支配している）
+}
+
 // ===== LLM判定（質問への返答内容） =====
 
 export interface ResponseJudgment {
@@ -60,6 +68,7 @@ export interface DominanceScoreBreakdown {
   interviewerFace: number
   voice: number
   filler: number
+  talkRatio: number
   response: number
 }
 
