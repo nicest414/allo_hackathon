@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import './OverlayRoot.css'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement
+} from 'react'
 import type { DesktopCaptureSource } from '../../../../shared/types/capture'
 import type { SttTranscriptEvent } from '../../../../shared/types/ipc'
 import type { FaceAnalysisResult, TranscriptSegment } from '../../../../shared/types/analysis'
@@ -523,41 +529,24 @@ export function OverlayRoot(): ReactElement {
     await stopInterviewerSttPipeline()
   }
 
-  const clampedDominance = Math.min(100, Math.max(0, Math.round(baseDominance)))
-  const dominanceLeadingSide =
-    clampedDominance === 50 ? 'neutral' : clampedDominance > 50 ? 'left' : 'right'
-  const hasStatusMessage =
-    faceLoopMessage !== '' ||
-    voiceLoopMessage !== '' ||
-    sttMessage !== '' ||
-    interviewerSttMessage !== ''
-
   return (
-    <div ref={overlayRootRef} className="overlay-root">
+    <div ref={overlayRootRef} style={styles.root}>
       <DominanceClashBanner
         value={baseDominance}
         candidatePortraitSrc={candidatePortraitImageUrl}
         interviewerPortraitSrc={interviewerPortraitImageUrl}
       />
-      <div className="overlay-panel">
-        <div className={`overlay-panel__dominance overlay-panel__dominance--${dominanceLeadingSide}`}>
-          <span>優勢度</span>
-          <span className="overlay-panel__dominance-value">{clampedDominance}</span>
-        </div>
-        <div className="overlay-panel__controls" data-overlay-control>
-          <button className="overlay-button" onClick={() => void loadScreenSources()}>
-            画面取得
-          </button>
+      <div style={styles.content}>
+        <div style={styles.values}>優勢度: {Math.round(baseDominance)}</div>
+        <div
+          style={styles.controls}
+          data-overlay-control
+        >
+          <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (
-            <button
-              className="overlay-button overlay-button--warning"
-              onClick={() => void openScreenSettings()}
-            >
-              許可設定を開く
-            </button>
+            <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
           ) : null}
           <select
-            className="overlay-select"
             value={selectedScreenSourceId}
             onChange={(event) => setSelectedScreenSourceId(event.target.value)}
           >
@@ -568,25 +557,20 @@ export function OverlayRoot(): ReactElement {
               </option>
             ))}
           </select>
-          <button className="overlay-button" onClick={() => void retakeCandidateAndInterviewerPortraits()}>
+          <button onClick={() => void retakeCandidateAndInterviewerPortraits()}>
             顔写真再取得
           </button>
           {interviewerManualFaceRect !== undefined ? (
-            <button className="overlay-button" onClick={() => setInterviewerManualFaceRect(undefined)}>
+            <button onClick={() => setInterviewerManualFaceRect(undefined)}>
               顔の範囲を再指定
             </button>
           ) : null}
           {isInterviewRunning ? (
-            <button className="overlay-button overlay-button--stop" onClick={() => void stopInterview()}>
-              面接終了
-            </button>
+            <button onClick={() => void stopInterview()}>面接終了</button>
           ) : (
-            <button className="overlay-button overlay-button--primary" onClick={() => void startInterview()}>
-              面接開始
-            </button>
+            <button onClick={() => void startInterview()}>面接開始</button>
           )}
           <button
-            className={`overlay-button overlay-button--toggle${autoJudgeEnabled ? ' is-active' : ''}`}
             onClick={() =>
               setAutoJudgeEnabled((value) => {
                 const next = !value
@@ -600,26 +584,15 @@ export function OverlayRoot(): ReactElement {
             自動判定: {autoJudgeEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
-        {hasStatusMessage ? (
-          <div className="overlay-panel__messages">
-            {faceLoopMessage ? <div className="overlay-message">{faceLoopMessage}</div> : null}
-            {voiceLoopMessage ? <div className="overlay-message">{voiceLoopMessage}</div> : null}
-            {sttMessage ? <div className="overlay-message">{sttMessage}</div> : null}
-            {interviewerSttMessage ? (
-              <div className="overlay-message">{interviewerSttMessage}</div>
-            ) : null}
-          </div>
+        {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
+        {voiceLoopMessage ? <div style={styles.sttMessage}>{voiceLoopMessage}</div> : null}
+        {sttMessage ? <div style={styles.sttMessage}>{sttMessage}</div> : null}
+        {interviewerSttMessage ? (
+          <div style={styles.sttMessage}>{interviewerSttMessage}</div>
         ) : null}
         {auto.judging || auto.score !== null ? (
-          <div className={`overlay-judge${auto.judging ? ' overlay-judge--pending' : ''}`}>
-            {auto.judging ? (
-              'LLM判定: 判定中…'
-            ) : (
-              <>
-                LLM判定: <span className="overlay-judge__score">{auto.score}点</span>
-                {auto.reason ? ` — ${auto.reason}` : ''}
-              </>
-            )}
+          <div style={styles.llmResult}>
+            LLM判定: {auto.judging ? '判定中…' : `${auto.score}点${auto.reason ? ` — ${auto.reason}` : ''}`}
           </div>
         ) : null}
       </div>
@@ -634,4 +607,49 @@ export function OverlayRoot(): ReactElement {
       ) : null}
     </div>
   )
+}
+
+const styles: Record<string, CSSProperties> = {
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    alignItems: 'stretch',
+    gap: '12px'
+  },
+  content: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '16px'
+  },
+  values: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '13px'
+  },
+  controls: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    justifyContent: 'center'
+  },
+  faceLoopMessage: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '12px'
+  },
+  sttMessage: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '12px'
+  },
+  llmResult: {
+    color: '#ffffff',
+    fontFamily: 'sans-serif',
+    fontSize: '13px',
+    maxWidth: '720px',
+    overflowWrap: 'anywhere'
+  }
 }
