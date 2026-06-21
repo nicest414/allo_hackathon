@@ -38,6 +38,12 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
-    plugins: [react()]
+    plugins: [react()],
+    build: {
+      // AudioWorkletは data: URL だとCSP(script-src 'self')で実行ブロックされるため、
+      // worklet ファイルだけはインライン化せず実アセットとして出力させる。
+      assetsInlineLimit: (filePath: string) =>
+        filePath.endsWith('pcmCaptureProcessor.js') ? false : undefined
+    }
   }
 })

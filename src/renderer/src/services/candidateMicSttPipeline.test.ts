@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SttTranscriptEvent } from '../../../shared/types/ipc'
+import type { CreatePcmCaptureNode } from './audio/pcmCaptureNode'
 import { createCandidateMicSttPipeline, encodePcm16 } from './candidateMicSttPipeline'
 
 describe('encodePcm16', () => {
@@ -22,6 +23,7 @@ describe('createCandidateMicSttPipeline', () => {
   it('starts STT with the AudioContext sample rate and sends PCM chunks', async () => {
     const track = { stop: vi.fn() }
     const audio = createFakeAudioContext(16000)
+    const capture = createFakeCaptureNode()
     const sentChunks: ArrayBuffer[] = []
     const pipeline = createCandidateMicSttPipeline({
       getMicStream: async () => ({
@@ -29,6 +31,7 @@ describe('createCandidateMicSttPipeline', () => {
         stream: { getTracks: () => [track] } as unknown as MediaStream
       }),
       createAudioContext: () => audio.context,
+      createCaptureNode: capture.create,
       startStt: vi.fn(async () => undefined),
       stopStt: vi.fn(async () => undefined),
       sendAudioChunk: async ({ audio }) => {
@@ -40,42 +43,21 @@ describe('createCandidateMicSttPipeline', () => {
       ok: true,
       sampleRate: 16000
     })
-    audio.emit(new Float32Array(4000).fill(0.5))
+    // chunkMs 250 @16000Hz = 4000 サンプル
+    expect(capture.create).toHaveBeenCalledWith(
+      audio.context,
+      expect.objectContaining({ chunkSampleCount: 4000 })
+    )
+    capture.emit(new Float32Array(4000).fill(0.5))
     await flushPromises()
 
     expect(sentChunks).toHaveLength(1)
     expect(sentChunks[0].byteLength).toBe(8000)
     expect(new DataView(sentChunks[0]).getInt16(0, true)).toBe(16383)
-    expect(audio.source.connect).toHaveBeenCalledWith(audio.processor)
-    expect(audio.processor.connect).toHaveBeenCalledWith(audio.mute)
+    expect(audio.source.connect).toHaveBeenCalledWith(capture.node)
+    expect(capture.node.connect).toHaveBeenCalledWith(audio.mute)
     expect(audio.mute.connect).toHaveBeenCalledWith(audio.context.destination)
     expect(pipeline.getState()).toEqual({ running: true, sampleRate: 16000 })
-  })
-
-  it('buffers partial frames until the configured chunk size is reached', async () => {
-    const audio = createFakeAudioContext(1000)
-    const sentChunks: ArrayBuffer[] = []
-    const pipeline = createCandidateMicSttPipeline({
-      getMicStream: async () => ({
-        ok: true,
-        stream: { getTracks: () => [] } as unknown as MediaStream
-      }),
-      createAudioContext: () => audio.context,
-      startStt: vi.fn(async () => undefined),
-      stopStt: vi.fn(async () => undefined),
-      sendAudioChunk: async ({ audio }) => {
-        sentChunks.push(audio)
-      }
-    })
-
-    await pipeline.start({ chunkMs: 4 })
-    audio.emit(new Float32Array([0.1, 0.2]))
-    await flushPromises()
-    audio.emit(new Float32Array([0.3, 0.4, 0.5]))
-    await flushPromises()
-
-    expect(sentChunks).toHaveLength(1)
-    expect(sentChunks[0].byteLength).toBe(8)
   })
 
   it('unsubscribes transcript listener and releases audio resources on stop', async () => {
@@ -83,12 +65,14 @@ describe('createCandidateMicSttPipeline', () => {
     const unsubscribe = vi.fn()
     const stopStt = vi.fn(async () => undefined)
     const audio = createFakeAudioContext(48000)
+    const capture = createFakeCaptureNode()
     const pipeline = createCandidateMicSttPipeline({
       getMicStream: async () => ({
         ok: true,
         stream: { getTracks: () => [track] } as unknown as MediaStream
       }),
       createAudioContext: () => audio.context,
+      createCaptureNode: capture.create,
       startStt: vi.fn(async () => undefined),
       stopStt,
       sendAudioChunk: vi.fn(async () => undefined),
@@ -99,8 +83,8 @@ describe('createCandidateMicSttPipeline', () => {
     await pipeline.stop()
 
     expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(capture.dispose).toHaveBeenCalledOnce()
     expect(audio.source.disconnect).toHaveBeenCalledOnce()
-    expect(audio.processor.disconnect).toHaveBeenCalledOnce()
     expect(audio.mute.disconnect).toHaveBeenCalledOnce()
     expect(track.stop).toHaveBeenCalledOnce()
     expect(audio.close).toHaveBeenCalledOnce()
@@ -118,6 +102,7 @@ describe('createCandidateMicSttPipeline', () => {
         stream: { getTracks: () => [track] } as unknown as MediaStream
       }),
       createAudioContext: () => audio.context,
+      createCaptureNode: createFakeCaptureNode().create,
       startStt: vi.fn(async () => {
         throw new Error('stt failed')
       }),
@@ -150,6 +135,7 @@ describe('createCandidateMicSttPipeline', () => {
         stream: { getTracks: () => [] } as unknown as MediaStream
       }),
       createAudioContext: () => audio.context,
+      createCaptureNode: createFakeCaptureNode().create,
       startStt: vi.fn(async () => {
         throw new Error('stt failed')
       }),
@@ -203,6 +189,7 @@ describe('createCandidateMicSttPipeline', () => {
     const pipeline = createCandidateMicSttPipeline({
       getMicStream,
       createAudioContext: () => audio.context,
+      createCaptureNode: createFakeCaptureNode().create,
       startStt: vi.fn(async () => undefined),
       stopStt: vi.fn(async () => undefined),
       sendAudioChunk: vi.fn(async () => undefined)
@@ -238,6 +225,7 @@ describe('createCandidateMicSttPipeline', () => {
         stream: streams[index]
       }),
       createAudioContext: () => audioContexts[index++],
+      createCaptureNode: createFakeCaptureNode().create,
       startStt: vi.fn(async () => undefined),
       stopStt: vi.fn(async () => undefined),
       sendAudioChunk: vi.fn(async () => undefined)
@@ -267,6 +255,7 @@ describe('createCandidateMicSttPipeline', () => {
         stream: { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream
       }),
       createAudioContext: () => audio.context,
+      createCaptureNode: createFakeCaptureNode().create,
       startStt: vi.fn(async () => undefined),
       stopStt: vi.fn(async () => undefined),
       sendAudioChunk: vi.fn(async () => undefined),
@@ -294,20 +283,13 @@ function readInt16Values(view: DataView): number[] {
 function createFakeAudioContext(sampleRate: number): {
   context: AudioContext
   source: MediaStreamAudioSourceNode
-  processor: ScriptProcessorNode
   mute: GainNode
   close: ReturnType<typeof vi.fn>
-  emit: (samples: Float32Array) => void
 } {
   const source = {
     connect: vi.fn(),
     disconnect: vi.fn()
   } as unknown as MediaStreamAudioSourceNode
-  const processor = {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    onaudioprocess: null
-  } as unknown as ScriptProcessorNode
   const mute = {
     gain: { value: 1 },
     connect: vi.fn(),
@@ -319,25 +301,35 @@ function createFakeAudioContext(sampleRate: number): {
     state: 'running',
     destination: {},
     createMediaStreamSource: vi.fn(() => source),
-    createScriptProcessor: vi.fn(() => processor),
     createGain: vi.fn(() => mute),
     resume: vi.fn(async () => undefined),
     close
   } as unknown as AudioContext
 
-  return {
-    context,
-    source,
-    processor,
-    mute,
-    close,
-    emit: (samples) => {
-      processor.onaudioprocess?.({
-        inputBuffer: {
-          getChannelData: () => samples
-        }
-      } as unknown as AudioProcessingEvent)
+  return { context, source, mute, close }
+}
+
+function createFakeCaptureNode(): {
+  create: ReturnType<typeof vi.fn> & CreatePcmCaptureNode
+  node: AudioNode
+  dispose: ReturnType<typeof vi.fn>
+  emit: (samples: Float32Array) => void
+} {
+  const node = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode
+  const dispose = vi.fn()
+  let onChunk: ((samples: Float32Array) => void) | undefined
+  const create = vi.fn(
+    async (_context: AudioContext, options: { onChunk: (samples: Float32Array) => void }) => {
+      onChunk = options.onChunk
+      return { node, dispose }
     }
+  ) as unknown as ReturnType<typeof vi.fn> & CreatePcmCaptureNode
+
+  return {
+    create,
+    node,
+    dispose,
+    emit: (samples) => onChunk?.(samples)
   }
 }
 
