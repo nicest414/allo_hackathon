@@ -14,17 +14,20 @@ import {
   listInterviewerScreenSources,
   openScreenSettings
 } from '../../capture/interviewerScreen'
+import type { NormalizedRect } from '../../capture/portraitFrame'
 import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopbackSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { voiceAnalysisLoop } from '../../services/voiceAnalysisLoop'
 import {
+  applyManualInterviewerPortraitRect,
   captureAndStoreCandidatePortrait,
   captureAndStoreInterviewerPortrait
 } from '../../services/portraitCaptureService'
 import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fillerDetector'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
+import { ManualFaceRegionDialog } from './ManualFaceRegionDialog'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { useAutoResponseJudge } from '../../hooks/useAutoResponseJudge'
 
@@ -38,6 +41,15 @@ export function OverlayRoot(): ReactElement {
   const interviewerPortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.interviewer
   )
+  const interviewerManualFaceRect = useDominanceStore((state) => state.interviewerManualFaceRect)
+  const setInterviewerManualFaceRect = useDominanceStore(
+    (state) => state.setInterviewerManualFaceRect
+  )
+  const [manualFaceDialogRequest, setManualFaceDialogRequest] = useState<{
+    rawFrameDataUrl: string
+    sourceWidth: number
+    sourceHeight: number
+  } | null>(null)
   const setScores = useDominanceStore((state) => state.setScores)
   const [faceLoopState, setFaceLoopState] = useState(faceAnalysisLoop.getState())
   const [screenSources, setScreenSources] = useState<DesktopCaptureSource[]>([])
@@ -134,6 +146,13 @@ export function OverlayRoot(): ReactElement {
       void interviewerLoopbackSttPipeline.stop()
     }
   }, [recomputeFiller])
+
+  // 手動範囲指定ダイアログはドラッグ操作を伴うため、ホバー時だけでなく開いている間は
+  // 常時クリックスルーをOFFにする（ホバーが外れた瞬間に裏のアプリへクリックが漏れてドラッグが
+  // 中断するのを防ぐ）。
+  useEffect(() => {
+    void window.allo.overlay.setClickThrough({ enabled: manualFaceDialogRequest === null })
+  }, [manualFaceDialogRequest])
 
   const refreshFaceLoopState = (): void => {
     setFaceLoopState(faceAnalysisLoop.getState())
@@ -280,6 +299,37 @@ export function OverlayRoot(): ReactElement {
     }
   }
 
+  // 自動検出→記憶済みmanualRect→(allowManualFallbackなら)手動指定ダイアログ、の優先順位で
+  // 面接官の顔写真を取得する。面接開始時(allowManualFallback=false)はダイアログを出さず、
+  // 「顔写真再取得」ボタン(allowManualFallback=true)のときだけユーザーに手動指定を促す。
+  const captureInterviewerPortraitWithFallback = async (
+    allowManualFallback: boolean
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (!selectedScreenSourceId) {
+      return { ok: false, message: '面接官の画面ソースが未選択です' }
+    }
+
+    const result = await captureAndStoreInterviewerPortrait({
+      sourceId: selectedScreenSourceId,
+      manualRect: interviewerManualFaceRect,
+      allowManualFallback
+    })
+
+    switch (result.kind) {
+      case 'stored':
+        return { ok: true }
+      case 'manual-required':
+        setManualFaceDialogRequest({
+          rawFrameDataUrl: result.rawFrameDataUrl,
+          sourceWidth: result.sourceWidth,
+          sourceHeight: result.sourceHeight
+        })
+        return { ok: false, message: '面接官の顔を検出できませんでした。範囲を指定してください。' }
+      case 'failed':
+        return { ok: false, message: '面接官の顔写真の取得に失敗しました' }
+    }
+  }
+
   const startCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
     const candidateResult = await faceAnalysisLoop.startCandidate({
       fps: 6,
@@ -295,11 +345,11 @@ export function OverlayRoot(): ReactElement {
     refreshFaceLoopState()
 
     if (interviewerResult.ok) {
-      void captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId }).catch(
-        (error: unknown) => {
-          console.warn('Failed to initialize interviewer portrait image', error)
+      void captureInterviewerPortraitWithFallback(false).then((result) => {
+        if (!result.ok && result.message) {
+          console.warn(result.message)
         }
-      )
+      })
     }
 
     const failureMessages: string[] = []
@@ -329,18 +379,14 @@ export function OverlayRoot(): ReactElement {
     setFaceLoopMessage('')
 
     const candidateImageUrl = await captureAndStoreCandidatePortrait()
-    const interviewerImageUrl = selectedScreenSourceId
-      ? await captureAndStoreInterviewerPortrait({ sourceId: selectedScreenSourceId })
-      : null
+    const interviewerResult = await captureInterviewerPortraitWithFallback(true)
 
     const failureMessages: string[] = []
     if (!candidateImageUrl) {
       failureMessages.push('候補者の顔写真の再取得に失敗しました')
     }
-    if (!selectedScreenSourceId) {
-      failureMessages.push('面接官の画面ソースが未選択です')
-    } else if (!interviewerImageUrl) {
-      failureMessages.push('面接官の顔写真の再取得に失敗しました')
+    if (!interviewerResult.ok && interviewerResult.message) {
+      failureMessages.push(interviewerResult.message)
     }
 
     if (failureMessages.length > 0) {
@@ -349,6 +395,20 @@ export function OverlayRoot(): ReactElement {
       console.log('[face] 顔写真を再取得しました')
       setFaceLoopMessage('')
     }
+  }
+
+  const handleManualFaceRegionConfirm = async (rect: NormalizedRect): Promise<void> => {
+    const request = manualFaceDialogRequest
+    setInterviewerManualFaceRect(rect)
+    setManualFaceDialogRequest(null)
+
+    if (request !== null) {
+      await applyManualInterviewerPortraitRect(request.rawFrameDataUrl, rect)
+    }
+  }
+
+  const handleManualFaceRegionCancel = (): void => {
+    setManualFaceDialogRequest(null)
   }
 
   const startInterview = async (): Promise<void> => {
@@ -397,6 +457,11 @@ export function OverlayRoot(): ReactElement {
           <button onClick={() => void retakeCandidateAndInterviewerPortraits()}>
             顔写真再取得
           </button>
+          {interviewerManualFaceRect !== undefined ? (
+            <button onClick={() => setInterviewerManualFaceRect(undefined)}>
+              顔の範囲を再指定
+            </button>
+          ) : null}
           {isInterviewRunning ? (
             <button onClick={() => void stopInterview()}>面接終了</button>
           ) : (
@@ -428,6 +493,15 @@ export function OverlayRoot(): ReactElement {
           </div>
         ) : null}
       </div>
+      {manualFaceDialogRequest ? (
+        <ManualFaceRegionDialog
+          rawFrameDataUrl={manualFaceDialogRequest.rawFrameDataUrl}
+          sourceWidth={manualFaceDialogRequest.sourceWidth}
+          sourceHeight={manualFaceDialogRequest.sourceHeight}
+          onConfirm={(rect) => void handleManualFaceRegionConfirm(rect)}
+          onCancel={handleManualFaceRegionCancel}
+        />
+      ) : null}
     </div>
   )
 }

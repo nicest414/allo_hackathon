@@ -57,4 +57,21 @@ describe('useDominanceStore', () => {
     expect(portraitImageUrls.candidate).toBe('candidate.png')
     expect(portraitImageUrls.interviewer).toBe('interviewer.png')
   })
+
+  it('keeps the manually specified interviewer face rect across interviews (reset)', () => {
+    const store = useDominanceStore.getState()
+    const rect = { x: 0.1, y: 0.2, width: 0.3, height: 0.3 }
+    store.setInterviewerManualFaceRect(rect)
+    store.reset()
+
+    expect(useDominanceStore.getState().interviewerManualFaceRect).toEqual(rect)
+  })
+
+  it('clears the manually specified interviewer face rect when set to undefined', () => {
+    const store = useDominanceStore.getState()
+    store.setInterviewerManualFaceRect({ x: 0.1, y: 0.2, width: 0.3, height: 0.3 })
+    store.setInterviewerManualFaceRect(undefined)
+
+    expect(useDominanceStore.getState().interviewerManualFaceRect).toBeUndefined()
+  })
 })

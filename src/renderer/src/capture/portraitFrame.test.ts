@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   calculateFaceCropBox,
+  calculateManualFaceCropBox,
   captureInterviewerPortraitImage,
-  capturePortraitFrame
+  capturePortraitFrame,
+  squareCropBoxFromCenter
 } from './portraitFrame'
 import type { NormalizedFaceLandmark } from '../analysis/face/faceLandmarker'
 
@@ -59,6 +61,64 @@ describe('calculateFaceCropBox', () => {
 
   it('returns null when landmarks are empty', () => {
     expect(calculateFaceCropBox([], 400, 400)).toBeNull()
+  })
+})
+
+describe('squareCropBoxFromCenter', () => {
+  it('returns a square of the given size centered on the point when no padding is requested', () => {
+    expect(squareCropBoxFromCenter({ x: 500, y: 250 }, 200, 1000, 500)).toEqual({
+      x: 400,
+      y: 150,
+      width: 200,
+      height: 200
+    })
+  })
+
+  it('applies paddingRatio the same way calculateFaceCropBox does', () => {
+    expect(squareCropBoxFromCenter({ x: 500, y: 250 }, 200, 1000, 500, 0.25)).toEqual({
+      x: 350,
+      y: 100,
+      width: 300,
+      height: 300
+    })
+  })
+
+  it('clamps the square so it stays inside the source frame', () => {
+    expect(squareCropBoxFromCenter({ x: 40, y: 40 }, 80, 400, 400, 0.5)).toEqual({
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 160
+    })
+  })
+})
+
+describe('calculateManualFaceCropBox', () => {
+  it('converts a normalized rect into a square crop box sized by its larger dimension', () => {
+    const cropBox = calculateManualFaceCropBox({ x: 0.4, y: 0.3, width: 0.2, height: 0.1 }, 1000, 500)
+
+    expect(cropBox).toEqual({
+      x: 400,
+      y: 75,
+      width: 200,
+      height: 200
+    })
+  })
+
+  it('clamps a rect that extends past the source frame', () => {
+    const cropBox = calculateManualFaceCropBox({ x: 0.85, y: 0.85, width: 0.3, height: 0.3 }, 400, 400)
+
+    expect(cropBox).toEqual({
+      x: 280,
+      y: 280,
+      width: 120,
+      height: 120
+    })
+  })
+
+  it('returns null for a degenerate rect or frame', () => {
+    expect(calculateManualFaceCropBox({ x: 0, y: 0, width: 0, height: 0.2 }, 400, 400)).toBeNull()
+    expect(calculateManualFaceCropBox({ x: 0, y: 0, width: 0.2, height: 0.2 }, 0, 400)).toBeNull()
   })
 })
 
