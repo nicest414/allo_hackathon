@@ -94,4 +94,21 @@ describe('detectFillers', () => {
     const result = detectFillers(segments, undefined, { windowMs: 10_000, now: () => now })
     expect(result.score).toBe(0)
   })
+
+  it('フィラー率で正規化するため、同じ出現回数でも長く話すほどスコアが下がる', () => {
+    const shortAnswer = detectFillers([{ timestamp: 0, text: 'えっと、強みです', isFinal: true }])
+    const longAnswer = detectFillers([
+      {
+        timestamp: 0,
+        text:
+          'えっと、私の強みは学生時代から続けている長期インターンで得た課題解決力です。' +
+          '具体的には毎週の定例会で改善案を提案し続けました。',
+        isFinal: true
+      }
+    ])
+
+    expect(shortAnswer.fillerCount).toBe(1)
+    expect(longAnswer.fillerCount).toBe(1)
+    expect(longAnswer.score).toBeLessThan(shortAnswer.score)
+  })
 })
