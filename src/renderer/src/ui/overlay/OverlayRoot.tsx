@@ -113,7 +113,6 @@ export function OverlayRoot(): ReactElement {
         return
       }
 
-      applyCursorMask(rootElement, cursorPosition)
       for (const element of rootElement.querySelectorAll<HTMLElement>(
         '[data-cursor-transparent-mask]'
       )) {
