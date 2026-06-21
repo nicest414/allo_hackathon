@@ -91,21 +91,43 @@ export function OverlayRoot(): ReactElement {
 
   useEffect(() => {
     let isDisposed = false
-    const applyCursorMask = (cursorPosition: CursorPosition | null): void => {
-      const element = overlayRootRef.current
-      if (!element) {
+    const applyCursorMask = (
+      element: HTMLElement,
+      cursorPosition: CursorPosition | null
+    ): void => {
+      if (cursorPosition === null) {
+        element.style.maskImage = ''
+        element.style.webkitMaskImage = ''
         return
       }
 
-      const maskStyle = buildCursorTransparencyMaskStyle(cursorPosition)
+      const bounds = element.getBoundingClientRect()
+      const maskStyle = buildCursorTransparencyMaskStyle({
+        x: cursorPosition.x - bounds.left,
+        y: cursorPosition.y - bounds.top
+      })
       element.style.maskImage = maskStyle.maskImage?.toString() ?? ''
       element.style.webkitMaskImage = maskStyle.WebkitMaskImage?.toString() ?? ''
+    }
+
+    const applyCursorMasks = (cursorPosition: CursorPosition | null): void => {
+      const rootElement = overlayRootRef.current
+      if (!rootElement) {
+        return
+      }
+
+      applyCursorMask(rootElement, cursorPosition)
+      for (const element of rootElement.querySelectorAll<HTMLElement>(
+        '[data-cursor-transparent-mask]'
+      )) {
+        applyCursorMask(element, cursorPosition)
+      }
     }
 
     const updateCursorPosition = async (): Promise<void> => {
       const cursorPosition = await window.allo.overlay.getCursorPosition()
       if (!isDisposed) {
-        applyCursorMask(cursorPosition)
+        applyCursorMasks(cursorPosition)
       }
     }
 
@@ -117,10 +139,7 @@ export function OverlayRoot(): ReactElement {
     return () => {
       isDisposed = true
       window.clearInterval(intervalId)
-      const element = overlayRootRef.current
-      if (element) {
-        applyCursorMask(null)
-      }
+      applyCursorMasks(null)
     }
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
