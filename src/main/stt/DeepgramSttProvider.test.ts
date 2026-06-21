@@ -70,7 +70,7 @@ describe('DeepgramSttProvider', () => {
     vi.unstubAllGlobals()
   })
 
-  it('フィラー保持パラメータとトークン認証で接続する', async () => {
+  it('フィラー保持・文末検出パラメータとトークン認証で接続する', async () => {
     const provider = new DeepgramSttProvider('test-key')
     await provider.start({ sampleRate: 48000, language: 'ja', speaker: 'candidate' })
 
@@ -79,8 +79,13 @@ describe('DeepgramSttProvider', () => {
     expect(ws.url).toContain('language=ja')
     expect(ws.url).toContain('encoding=linear16')
     expect(ws.url).toContain('sample_rate=48000')
-    expect(ws.url).toContain('punctuate=false')
+    // 句読点はONにしつつ filler_words でフィラーを残す
+    expect(ws.url).toContain('punctuate=true')
     expect(ws.url).toContain('smart_format=false')
+    expect(ws.url).toContain('filler_words=true')
+    // 文末検出の安定化
+    expect(ws.url).toContain('endpointing=300')
+    expect(ws.url).toContain('utterance_end_ms=1000')
     expect(ws.protocols).toEqual(['token', 'test-key'])
   })
 

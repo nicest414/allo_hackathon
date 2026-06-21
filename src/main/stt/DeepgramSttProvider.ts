@@ -10,8 +10,10 @@ const KEEPALIVE_INTERVAL_MS = 8_000
  * Deepgram streaming STTの実装。Node 22のglobal WebSocketで接続する（依存追加なし）。
  * 認証はDeepgramのサブプロトコル方式（['token', apiKey]）を使う。
  *
- * punctuate=false / smart_format=false にして「えっと」等のフィラーを整形させず、
- * 生に近い文字起こしを得る（フィラー検出の入力源にするため）。
+ * punctuate=true で読点を入れて可読性とLLM判定の質を上げつつ、filler_words=true で
+ * 「えっと」等のフィラーを残す（フィラー検出の入力源にするため）。smart_format=false は
+ * 数値・日付の整形でテキストが変質するのを避けるため維持する。
+ * endpointing / utterance_end_ms で文末検出を安定させ、finalセグメントの細切れを減らす。
  * 接続確立前に届いた音声chunkはキューに退避し、open後にまとめて送る。
  */
 export class DeepgramSttProvider implements SttProvider {
@@ -31,8 +33,14 @@ export class DeepgramSttProvider implements SttProvider {
       sample_rate: String(request.sampleRate),
       channels: '1',
       interim_results: 'true',
-      punctuate: 'false',
-      smart_format: 'false'
+      // 可読性とLLM判定の質のため句読点はON。フィラーは filler_words=true で残す。
+      punctuate: 'true',
+      smart_format: 'false',
+      filler_words: 'true',
+      // 文末検出を安定させ、finalセグメントの細切れ・誤確定を減らす。
+      endpointing: '300',
+      utterance_end_ms: '1000',
+      vad_events: 'true'
     })
 
     const ws = new WebSocket(`${DEEPGRAM_WS_BASE}?${params.toString()}`, ['token', this.apiKey])
