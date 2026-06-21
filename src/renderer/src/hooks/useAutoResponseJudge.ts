@@ -32,7 +32,8 @@ export interface AutoResponseJudgeView {
 }
 
 /**
- * 面接官の質問×就活生の回答を沈黙検知で自動判定するフック。
+ * 面接官の質問×就活生の回答を、質問と回答のやり取りが1セット終わるタイミング
+ * （面接官の次の質問が来た時点。来ない場合は沈黙のフォールバックタイマー）で自動判定するフック。
  * enabled=false の間は reportQuestion/reportAnswer がトラッカーを動かさず、LLMを一切呼ばない。
  */
 export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
@@ -45,7 +46,7 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
 
   // 同一ターン内のLLM呼び出し回数（クォータ消費の追跡用）。reportQuestionで新ターンになるとリセット。
   const turnCallCountRef = useRef(0)
-  // 直近の連続エラー回数。429等の失敗が中立(50)としてEMAに混入していることが分かるようにする。
+  // 直近の連続エラー回数。429等の失敗が続いていることをログで分かるようにする（EMAには加算しない）。
   const consecutiveErrorCountRef = useRef(0)
   // 直近の質問×回答ペアを保持し、文脈依存の質問（指示語・前の回答への言及等）の判定精度を上げる。
   const historyTrackerRef = useRef<ResponseHistoryTracker | undefined>(undefined)
@@ -73,6 +74,17 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
           return
         }
 
+        if (outcome.status === 'error') {
+          // API呼び出し失敗時の中立値(50)は実際の判定ではないため、優勢度のEMAに加算しない
+          // （直前の有効なスコア/理由をそのまま維持する）。
+          consecutiveErrorCountRef.current += 1
+          console.log(
+            `[auto-judge] status=error(連続${consecutiveErrorCountRef.current}回目) reason=${outcome.result.reason}（優勢度には加算しない）`
+          )
+          return
+        }
+
+        consecutiveErrorCountRef.current = 0
         const responseScore = calculateResponseScore({
           question: request.question,
           answer: request.answer,
@@ -82,16 +94,7 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
         dominanceOrchestrator.reportResponse(responseScore)
         setScore(responseScore)
         setReason(outcome.result.reason)
-
-        if (outcome.status === 'error') {
-          consecutiveErrorCountRef.current += 1
-          console.log(
-            `[auto-judge] status=error(連続${consecutiveErrorCountRef.current}回目) response=${responseScore}(中立値としてEMAに混入) reason=${outcome.result.reason}`
-          )
-        } else {
-          consecutiveErrorCountRef.current = 0
-          console.log(`[auto-judge] status=ok response=${responseScore} reason=${outcome.result.reason}`)
-        }
+        console.log(`[auto-judge] status=ok response=${responseScore} reason=${outcome.result.reason}`)
       } finally {
         setJudging(false)
       }

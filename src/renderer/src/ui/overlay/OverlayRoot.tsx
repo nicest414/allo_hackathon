@@ -658,7 +658,7 @@ export function OverlayRoot(): ReactElement {
               setAutoJudgeEnabled((value) => {
                 const next = !value
                 console.log(
-                  `[auto-judge] 自動判定: ${next ? 'ON（沈黙2.5秒で発火）' : 'OFF'}`
+                  `[auto-judge] 自動判定: ${next ? 'ON（次の質問が来たタイミングで発火、未到着時は沈黙8秒でフォールバック）' : 'OFF'}`
                 )
                 return next
               })
