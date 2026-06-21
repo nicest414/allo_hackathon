@@ -18,9 +18,10 @@ export function buildCursorTransparencyMaskStyle(
 
   const maskImage = [
     `radial-gradient(circle at ${cursorPosition.x}px ${cursorPosition.y}px,`,
-    `transparent 0 ${CLEAR_RADIUS_PX}px,`,
-    `rgba(0, 0, 0, 0.22) ${FEATHER_RADIUS_PX}px,`,
-    `#000 ${OUTER_RADIUS_PX}px)`
+    `transparent 0px,`,
+    `transparent ${CLEAR_RADIUS_PX}px,`,
+    `rgba(255, 255, 255, 0.22) ${FEATHER_RADIUS_PX}px,`,
+    `#fff ${OUTER_RADIUS_PX}px)`
   ].join(' ')
 
   return {

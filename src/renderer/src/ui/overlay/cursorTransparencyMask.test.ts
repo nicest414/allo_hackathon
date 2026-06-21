@@ -10,8 +10,9 @@ describe('buildCursorTransparencyMaskStyle', () => {
     const style = buildCursorTransparencyMaskStyle({ x: 120, y: 34 })
 
     expect(style.maskImage).toContain('circle at 120px 34px')
-    expect(style.maskImage).toContain('transparent 0 56px')
-    expect(style.maskImage).toContain('rgba(0, 0, 0, 0.22) 92px')
+    expect(style.maskImage).toContain('transparent 0px')
+    expect(style.maskImage).toContain('transparent 56px')
+    expect(style.maskImage).toContain('rgba(255, 255, 255, 0.22) 92px')
     expect(style.WebkitMaskImage).toBe(style.maskImage)
   })
 })

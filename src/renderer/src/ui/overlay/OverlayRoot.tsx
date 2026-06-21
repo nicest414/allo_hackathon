@@ -96,8 +96,13 @@ export function OverlayRoot(): ReactElement {
       cursorPosition: CursorPosition | null
     ): void => {
       if (cursorPosition === null) {
-        element.style.maskImage = ''
-        element.style.webkitMaskImage = ''
+        element.style.removeProperty('mask-image')
+        element.style.removeProperty('-webkit-mask-image')
+        element.style.removeProperty('mask-mode')
+        element.style.removeProperty('mask-repeat')
+        element.style.removeProperty('-webkit-mask-repeat')
+        element.style.removeProperty('mask-size')
+        element.style.removeProperty('-webkit-mask-size')
         return
       }
 
@@ -106,8 +111,14 @@ export function OverlayRoot(): ReactElement {
         x: cursorPosition.x - bounds.left,
         y: cursorPosition.y - bounds.top
       })
-      element.style.maskImage = maskStyle.maskImage?.toString() ?? ''
-      element.style.webkitMaskImage = maskStyle.WebkitMaskImage?.toString() ?? ''
+      const maskImage = maskStyle.maskImage?.toString() ?? ''
+      element.style.setProperty('mask-image', maskImage)
+      element.style.setProperty('-webkit-mask-image', maskImage)
+      element.style.setProperty('mask-mode', 'alpha')
+      element.style.setProperty('mask-repeat', 'no-repeat')
+      element.style.setProperty('-webkit-mask-repeat', 'no-repeat')
+      element.style.setProperty('mask-size', '100% 100%')
+      element.style.setProperty('-webkit-mask-size', '100% 100%')
     }
 
     const applyCursorMasks = (cursorPosition: CursorPosition | null): void => {
