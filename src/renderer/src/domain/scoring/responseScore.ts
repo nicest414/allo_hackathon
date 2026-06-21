@@ -1,6 +1,5 @@
 import type { ResponseJudgment } from '../../../../shared/types/analysis'
-
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
+import { clampScore } from './scoreUtils'
 
 const DEFAULT_RESPONSE_SCORE = 50
 
@@ -13,5 +12,5 @@ export function calculateResponseScore(judgment: ResponseJudgment | undefined): 
     return DEFAULT_RESPONSE_SCORE
   }
 
-  return clamp(judgment.score)
+  return clampScore(judgment.score)
 }

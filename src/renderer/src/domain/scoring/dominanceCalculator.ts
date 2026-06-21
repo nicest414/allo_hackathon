@@ -5,6 +5,7 @@ import type {
   FillerDetectionResult,
   VoiceScore
 } from '../../../../shared/types/analysis'
+import { clampScore } from './scoreUtils'
 
 /**
  * 優勢度は二段階で求める:
@@ -45,8 +46,6 @@ export const RESPONSE_CORRECTION_INFLUENCE = 0.4
 /** 質問内で複数回判定が届く場合のEMA係数（直近を重視し古い判定を減衰させる）。 */
 export const RESPONSE_SCORE_SMOOTHING = 0.6
 
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
-
 export type BaseDominanceBreakdown = Omit<DominanceScoreBreakdown, 'response'>
 
 export interface BaseDominance {
@@ -55,24 +54,31 @@ export interface BaseDominance {
   breakdown: BaseDominanceBreakdown
 }
 
-/**
- * 第1段階: リアルタイム4項目から基礎優勢度を算出する。
- * voice/fillerは値が大きいほど「焦り・フィラーが多い」ので100から引いて反転させる。
- */
-export function calculateBaseDominance(input: BaseDominanceInput): BaseDominance {
-  const breakdown: BaseDominanceBreakdown = {
-    candidateFace: clamp(input.candidateFace.value),
-    interviewerFace: clamp(input.interviewerFace.value),
-    voice: clamp(100 - input.voice.value),
-    filler: clamp(100 - input.filler.score)
+function toBaseDominanceBreakdown(input: BaseDominanceInput): BaseDominanceBreakdown {
+  return {
+    candidateFace: clampScore(input.candidateFace.value),
+    interviewerFace: clampScore(input.interviewerFace.value),
+    voice: clampScore(100 - input.voice.value),
+    filler: clampScore(100 - input.filler.score)
   }
+}
 
-  const value = clamp(
+function calculateWeightedBaseDominance(breakdown: BaseDominanceBreakdown): number {
+  return clampScore(
     breakdown.candidateFace * BASE_DOMINANCE_WEIGHTS.candidateFace +
       breakdown.interviewerFace * BASE_DOMINANCE_WEIGHTS.interviewerFace +
       breakdown.voice * BASE_DOMINANCE_WEIGHTS.voice +
       breakdown.filler * BASE_DOMINANCE_WEIGHTS.filler
   )
+}
+
+/**
+ * 第1段階: リアルタイム4項目から基礎優勢度を算出する。
+ * voice/fillerは値が大きいほど「焦り・フィラーが多い」ので100から引いて反転させる。
+ */
+export function calculateBaseDominance(input: BaseDominanceInput): BaseDominance {
+  const breakdown = toBaseDominanceBreakdown(input)
+  const value = calculateWeightedBaseDominance(breakdown)
 
   return { timestamp: input.timestamp, value, breakdown }
 }
@@ -85,7 +91,7 @@ export function calculateResponseCorrection(responseScore: number | undefined): 
     return 0
   }
 
-  return (clamp(responseScore) - NEUTRAL_RESPONSE_SCORE) * RESPONSE_CORRECTION_INFLUENCE
+  return (clampScore(responseScore) - NEUTRAL_RESPONSE_SCORE) * RESPONSE_CORRECTION_INFLUENCE
 }
 
 /**
@@ -95,7 +101,7 @@ export function applyResponseCorrection(
   baseValue: number,
   responseScore: number | undefined
 ): number {
-  return clamp(baseValue + calculateResponseCorrection(responseScore))
+  return clampScore(baseValue + calculateResponseCorrection(responseScore))
 }
 
 /**
@@ -107,13 +113,13 @@ export function accumulateResponseScore(
   latest: number,
   alpha: number = RESPONSE_SCORE_SMOOTHING
 ): number {
-  const clampedLatest = clamp(latest)
+  const clampedLatest = clampScore(latest)
 
   if (previous === undefined || Number.isNaN(previous)) {
     return clampedLatest
   }
 
-  return clamp(alpha * clampedLatest + (1 - alpha) * clamp(previous))
+  return clampScore(alpha * clampedLatest + (1 - alpha) * clampScore(previous))
 }
 
 export interface DominanceCalculatorInput extends BaseDominanceInput {
@@ -129,10 +135,12 @@ export function calculateDominance(input: DominanceCalculatorInput): DominanceSc
   const base = calculateBaseDominance(input)
   const value = applyResponseCorrection(base.value, input.response)
 
-  const breakdown: DominanceScoreBreakdown = {
-    ...base.breakdown,
-    response: input.response === undefined ? NEUTRAL_RESPONSE_SCORE : clamp(input.response)
+  return {
+    timestamp: input.timestamp,
+    value,
+    breakdown: {
+      ...base.breakdown,
+      response: input.response === undefined ? NEUTRAL_RESPONSE_SCORE : clampScore(input.response)
+    }
   }
-
-  return { timestamp: input.timestamp, value, breakdown }
 }

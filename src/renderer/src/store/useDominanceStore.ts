@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import {
   accumulateResponseScore,
-  calculateBaseDominance,
-  calculateDominance
+  applyResponseCorrection,
+  calculateBaseDominance
 } from '../domain/scoring/dominanceCalculator'
+import { clampScore } from '../domain/scoring/scoreUtils'
 import type { NormalizedRect } from '../capture/portraitFrame'
 
 export interface DominanceScores {
@@ -54,8 +55,6 @@ interface DominanceState {
   reset: () => void
 }
 
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
-
 const initialDominance = 50
 
 const initialScores: DominanceScores = {
@@ -66,21 +65,56 @@ const initialScores: DominanceScores = {
   response: 50
 }
 
+function formatLogTimestamp(now = new Date()): string {
+  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`
+}
+
+function createLogEntry(message: string, type: LogEntry['type']): LogEntry {
+  return {
+    id: Math.random().toString(36).substring(2, 9),
+    timestamp: formatLogTimestamp(),
+    message,
+    type
+  }
+}
+
 function calculateDominanceState(
   scores: DominanceScores
 ): Pick<DominanceState, 'baseDominance' | 'dominance'> {
-  const input = {
+  const base = calculateBaseDominance({
     timestamp: Date.now(),
     candidateFace: { subject: 'candidate', value: scores.candidateFace } as const,
     interviewerFace: { subject: 'interviewer', value: scores.interviewerFace } as const,
     voice: { value: scores.voice },
-    filler: { matchedFillers: [], fillerCount: 0, score: scores.filler },
-    response: scores.response
-  }
-  const base = calculateBaseDominance(input)
-  const corrected = calculateDominance(input)
+    filler: { matchedFillers: [], fillerCount: 0, score: scores.filler }
+  })
 
-  return { baseDominance: base.value, dominance: corrected.value }
+  return {
+    baseDominance: base.value,
+    dominance: applyResponseCorrection(base.value, scores.response)
+  }
+}
+
+function scoreLogType(key: keyof DominanceScores): LogEntry['type'] {
+  if (key === 'filler') {
+    return 'warn'
+  }
+
+  if (key === 'response') {
+    return 'success'
+  }
+
+  return 'info'
+}
+
+function normalizeScoreUpdate(
+  key: keyof DominanceScores,
+  value: number,
+  accumulatedResponseScore: number | undefined
+): number {
+  return key === 'response'
+    ? accumulateResponseScore(accumulatedResponseScore, value)
+    : clampScore(value)
 }
 
 interface DominanceInternalState extends DominanceState {
@@ -97,14 +131,7 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
   logs: [],
   addLog: (message, type = 'info') =>
     set((state) => {
-      const now = new Date()
-      const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`
-      const newEntry: LogEntry = {
-        id: Math.random().toString(36).substring(2, 9),
-        timestamp,
-        message,
-        type
-      }
+      const newEntry = createLogEntry(message, type)
       return { logs: [newEntry, ...state.logs].slice(0, 50) }
     }),
   clearLogs: () => set({ logs: [] }),
@@ -112,7 +139,7 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
     set({ mockMode })
     useDominanceStore.getState().addLog(`Mock Mode: ${mockMode ? 'ENABLED (Sensors Ignored)' : 'DISABLED'}`, 'info')
   },
-  setDominance: (dominance) => set({ dominance: clamp(dominance) }),
+  setDominance: (dominance) => set({ dominance: clampScore(dominance) }),
   setScores: (partialScores, force = false) =>
     set((state) => {
       if (state.mockMode && !force) {
@@ -126,13 +153,10 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
       for (const key of Object.keys(partialScores) as Array<keyof DominanceScores>) {
         const value = partialScores[key]
         if (value !== undefined) {
-          const clampedValue = key === 'response'
-            ? accumulateResponseScore(accumulatedResponseScore, value)
-            : clamp(value)
+          const clampedValue = normalizeScoreUpdate(key, value, accumulatedResponseScore)
           
           if (next[key] !== clampedValue) {
-            const logType = key === 'filler' ? 'warn' : key === 'response' ? 'success' : 'info'
-            store.addLog(`[Score Update] ${key}: ${clampedValue} (was ${next[key]})`, logType)
+            store.addLog(`[Score Update] ${key}: ${clampedValue} (was ${next[key]})`, scoreLogType(key))
           }
 
           next[key] = clampedValue

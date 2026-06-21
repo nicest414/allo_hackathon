@@ -1,4 +1,5 @@
 import type { AnalysisSubject, FaceAnalysisResult } from '../../../../shared/types/analysis'
+import { clampScore } from '../../domain/scoring/scoreUtils'
 import type { FaceLandmarker, FaceLandmarkerInput, FaceLandmarkerResult } from './faceLandmarker'
 
 export interface FaceAnalyzerOptions {
@@ -10,8 +11,6 @@ export interface FaceAnalyzer {
   analyze(input: FaceLandmarkerInput): Promise<FaceAnalysisResult>
   close?(): void | Promise<void>
 }
-
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
 export function createCandidateFaceAnalyzer(options: FaceAnalyzerOptions): FaceAnalyzer {
   return createFaceAnalyzer('candidate', options)
@@ -98,7 +97,7 @@ function estimateSmileLevel(landmarks: FaceLandmarkerResult['landmarks']): numbe
   const cornerY = (leftMouth.y + rightMouth.y) / 2
   const cornerLift = (mouthCenterY - cornerY) / faceScale
 
-  return clamp(cornerLift * SMILE_LIFT_SCALE)
+  return clampScore(cornerLift * SMILE_LIFT_SCALE)
 }
 
 function estimateTensionLevel(
@@ -111,11 +110,11 @@ function estimateTensionLevel(
   const rightEye = landmarks[263]
 
   if (!leftBrow || !rightBrow || !leftEye || !rightEye) {
-    return clamp(40 - smileLevel * 0.25)
+    return clampScore(40 - smileLevel * 0.25)
   }
 
   const browHeight = ((leftEye.y - leftBrow.y) + (rightEye.y - rightBrow.y)) / 2
-  return clamp(70 - browHeight * 250 - smileLevel * 0.25)
+  return clampScore(70 - browHeight * 250 - smileLevel * 0.25)
 }
 
 function distance(

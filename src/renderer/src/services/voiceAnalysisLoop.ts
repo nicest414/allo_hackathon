@@ -6,6 +6,7 @@ import {
   type CandidateMicVoiceAnalyzerOptions
 } from '../capture/candidateMic'
 import { calculateVoiceScore } from '../domain/scoring/voiceScore'
+import { createAsyncOperationQueue } from './asyncOperationQueue'
 import { dominanceOrchestrator } from './dominanceOrchestrator'
 
 export interface VoiceAnalysisLoopStartOptions extends CandidateMicVoiceAnalyzerOptions {
@@ -54,7 +55,7 @@ export function createVoiceAnalysisLoop(
 
   let analyzer: RealtimeVoiceAnalyzer | undefined
   let timer: ReturnType<typeof setInterval> | undefined
-  let operationQueue: Promise<void> = Promise.resolve()
+  const operationQueue = createAsyncOperationQueue()
 
   async function startNow(options: VoiceAnalysisLoopStartOptions): Promise<VoiceAnalysisLoopStartResult> {
     await stopNow()
@@ -98,18 +99,9 @@ export function createVoiceAnalysisLoop(
     }
   }
 
-  function enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    const next = operationQueue.catch(() => undefined).then(operation)
-    operationQueue = next.then(
-      () => undefined,
-      () => undefined
-    )
-    return next
-  }
-
   return {
-    start: (options = {}) => enqueue(() => startNow(options)),
-    stop: () => enqueue(stopNow),
+    start: (options = {}) => operationQueue.enqueue(() => startNow(options)),
+    stop: () => operationQueue.enqueue(stopNow),
     getState: () => ({ running: analyzer !== undefined })
   }
 }

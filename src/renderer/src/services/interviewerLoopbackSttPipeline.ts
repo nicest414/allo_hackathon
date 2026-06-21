@@ -1,16 +1,23 @@
 import type { CaptureErrorInfo } from '../../../shared/types/capture'
 import type { SttSpeaker, SttTranscriptEvent } from '../../../shared/types/ipc'
 import { getInterviewerLoopbackAudioStream } from '../capture/interviewerScreen'
-
-const SPEAKER: SttSpeaker = 'interviewer'
 import { toCaptureErrorInfo } from '../capture/types'
-import { encodePcm16 } from './candidateMicSttPipeline'
 import {
   onSttTranscript,
   sendSttAudioChunk,
   startStt,
   stopStt
 } from './sttService'
+import {
+  appendSamples,
+  createDefaultAudioContext,
+  encodePcm16,
+  resumeAudioContext,
+  toChunkSampleCount
+} from './sttAudioUtils'
+import { createAsyncOperationQueue } from './asyncOperationQueue'
+
+const SPEAKER: SttSpeaker = 'interviewer'
 
 export interface InterviewerLoopbackSttPipelineStartOptions {
   chunkMs?: number
@@ -57,7 +64,6 @@ interface InterviewerLoopbackSttSession {
   unsubscribeTranscript?: () => void
 }
 
-const DEFAULT_CHUNK_MS = 250
 const PROCESSOR_BUFFER_SIZE = 4096
 const INPUT_CHANNELS = 1
 const OUTPUT_CHANNELS = 1
@@ -73,12 +79,12 @@ export function createInterviewerLoopbackSttPipeline(
   const subscribeTranscript = dependencies.onTranscript ?? onSttTranscript
 
   let session: InterviewerLoopbackSttSession | undefined
-  let operationQueue: Promise<void> = Promise.resolve()
+  const operationQueue = createAsyncOperationQueue()
 
   async function start(
     options: InterviewerLoopbackSttPipelineStartOptions = {}
   ): Promise<InterviewerLoopbackSttPipelineStartResult> {
-    return enqueueOperation(async () => {
+    return operationQueue.enqueue(async () => {
       await stopNow()
       const { language, onTranscript: transcriptListener } = options
       const loopbackResult = await getLoopbackStream()
@@ -121,7 +127,7 @@ export function createInterviewerLoopbackSttPipeline(
   }
 
   async function stop(): Promise<void> {
-    await enqueueOperation(stopNow)
+    await operationQueue.enqueue(stopNow)
   }
 
   function createSession(
@@ -229,16 +235,6 @@ export function createInterviewerLoopbackSttPipeline(
     })
   }
 
-  function enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {
-    const next = operationQueue.catch(() => undefined).then(operation)
-    operationQueue = next.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return next
-  }
-
   return {
     start,
     stop,
@@ -247,36 +243,6 @@ export function createInterviewerLoopbackSttPipeline(
       sampleRate: session?.audioContext.sampleRate
     })
   }
-}
-
-function createDefaultAudioContext(): AudioContext {
-  const AudioContextConstructor =
-    window.AudioContext ??
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-
-  if (!AudioContextConstructor) {
-    throw new Error('この環境ではAudioContextがサポートされていません')
-  }
-
-  return new AudioContextConstructor()
-}
-
-async function resumeAudioContext(audioContext: AudioContext): Promise<void> {
-  if (audioContext.state === 'suspended') {
-    await audioContext.resume()
-  }
-}
-
-function toChunkSampleCount(sampleRate: number, chunkMs = DEFAULT_CHUNK_MS): number {
-  const safeChunkMs = Number.isFinite(chunkMs) && chunkMs > 0 ? chunkMs : DEFAULT_CHUNK_MS
-  return Math.max(1, Math.round((sampleRate * safeChunkMs) / 1000))
-}
-
-function appendSamples(current: Float32Array, next: Float32Array): Float32Array {
-  const combined = new Float32Array(current.length + next.length)
-  combined.set(current)
-  combined.set(next, current.length)
-  return combined
 }
 
 export const interviewerLoopbackSttPipeline = createInterviewerLoopbackSttPipeline()

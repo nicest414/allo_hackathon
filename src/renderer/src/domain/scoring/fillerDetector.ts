@@ -1,4 +1,5 @@
 import type { FillerDetectionResult, TranscriptSegment } from '../../../../shared/types/analysis'
+import { clampScore } from './scoreUtils'
 
 /**
  * フィラー語リスト。Deepgram(ja)の実出力に合わせ、同じ間投詞の表記ゆれ
@@ -36,8 +37,6 @@ export interface DetectFillersOptions {
   /** 現在時刻取得（テスト用）。 */
   now?: () => number
 }
-
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
 /** 連続する長音を1つに畳む（「えーー」→「えー」）など軽い正規化を行う。 */
 function normalize(text: string): string {
@@ -91,6 +90,6 @@ export function detectFillers(
   return {
     matchedFillers,
     fillerCount,
-    score: clamp(fillerCount * SCORE_PER_FILLER)
+    score: clampScore(fillerCount * SCORE_PER_FILLER)
   }
 }

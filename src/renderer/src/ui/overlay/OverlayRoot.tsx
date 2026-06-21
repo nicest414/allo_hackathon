@@ -19,6 +19,7 @@ import {
   captureAndStoreInterviewerPortrait
 } from '../../services/portraitCaptureService'
 import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fillerDetector'
+import { roundScore } from '../../domain/scoring/scoreUtils'
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { ManualFaceRegionDialog } from './ManualFaceRegionDialog'
@@ -523,7 +524,7 @@ export function OverlayRoot(): ReactElement {
     await stopInterviewerSttPipeline()
   }
 
-  const clampedDominance = Math.min(100, Math.max(0, Math.round(baseDominance)))
+  const clampedDominance = roundScore(baseDominance)
   const dominanceLeadingSide =
     clampedDominance === 50 ? 'neutral' : clampedDominance > 50 ? 'left' : 'right'
   const hasStatusMessage =

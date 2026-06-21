@@ -3,6 +3,7 @@ import './DominanceClashBanner.css'
 import leftPortrait from '../../assets/portrait/left.png'
 import rightPortrait from '../../assets/portrait/right.png'
 import lightningVideo from '../../assets/video/lightning_transparent.webm'
+import { roundScore } from '../../domain/scoring/scoreUtils'
 
 interface DominanceClashBannerProps {
   value: number
@@ -90,7 +91,7 @@ export function DominanceClashBanner({
   candidatePortraitSrc,
   interviewerPortraitSrc
 }: DominanceClashBannerProps): ReactElement {
-  const clamped = Math.min(100, Math.max(0, Math.round(value)))
+  const clamped = roundScore(value)
   // value(優勢度)は100=候補者(You/左)が完全優勢、0=面接官(相手/右)が完全優勢
   // (dominanceCalculatorのテスト参照)。Youは左側なので、優勢度が高いほど左ゾーンを広げる。
   const leftWidth = clamped

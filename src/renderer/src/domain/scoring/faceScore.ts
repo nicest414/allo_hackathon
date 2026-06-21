@@ -3,6 +3,7 @@ import type {
   FaceExpressionLabel,
   FaceScore
 } from '../../../../shared/types/analysis'
+import { clampScore } from './scoreUtils'
 
 const EXPRESSION_BONUS: Record<FaceExpressionLabel, number> = {
   neutral: 0,
@@ -12,8 +13,6 @@ const EXPRESSION_BONUS: Record<FaceExpressionLabel, number> = {
   unknown: 0
 }
 
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
-
 /**
  * 「落ち着き(tensionLevelの逆)」と「笑顔度」を半々で合成した暫定スコア。
  * candidate/interviewerどちらの表情にも同じ式を使う。面接官側は
@@ -22,7 +21,7 @@ const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 export function calculateFaceScore(result: FaceAnalysisResult): FaceScore {
   const composure = 100 - result.tensionLevel
   const base = composure * 0.5 + result.smileLevel * 0.5
-  const value = clamp(base + EXPRESSION_BONUS[result.expression])
+  const value = clampScore(base + EXPRESSION_BONUS[result.expression])
 
   return {
     subject: result.subject,

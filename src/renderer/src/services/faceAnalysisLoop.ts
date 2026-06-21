@@ -15,6 +15,7 @@ import {
   type InterviewerScreenOptions
 } from '../capture/interviewerScreen'
 import { calculateFaceScore } from '../domain/scoring/faceScore'
+import { createAsyncOperationQueue, type AsyncOperationQueue } from './asyncOperationQueue'
 import { dominanceOrchestrator } from './dominanceOrchestrator'
 
 type FaceLoopSubject = 'candidate' | 'interviewer'
@@ -115,16 +116,16 @@ export function createFaceAnalysisLoop(
   const clearTimer = dependencies.clearTimer ?? ((handle) => clearTimeout(handle))
 
   const sessions: Partial<Record<FaceLoopSubject, FaceLoopSession>> = {}
-  const operationQueues: Record<FaceLoopSubject, Promise<void>> = {
-    candidate: Promise.resolve(),
-    interviewer: Promise.resolve()
+  const operationQueues: Record<FaceLoopSubject, AsyncOperationQueue> = {
+    candidate: createAsyncOperationQueue(),
+    interviewer: createAsyncOperationQueue()
   }
   const analysisListeners = new Set<(subject: FaceLoopSubject, result: FaceAnalysisResult) => void>()
 
   async function startCandidate(
     options: CandidateFaceAnalysisLoopOptions = {}
   ): Promise<FaceAnalysisLoopStartResult> {
-    return enqueueOperation('candidate', async () => {
+    return operationQueues.candidate.enqueue(async () => {
       await stopNow('candidate')
 
       const capture = await captureCandidateCamera(options)
@@ -148,7 +149,7 @@ export function createFaceAnalysisLoop(
   async function startInterviewer(
     options: InterviewerFaceAnalysisLoopOptions
   ): Promise<FaceAnalysisLoopStartResult> {
-    return enqueueOperation('interviewer', async () => {
+    return operationQueues.interviewer.enqueue(async () => {
       await stopNow('interviewer')
 
       if (!options.sourceId) {
@@ -254,7 +255,7 @@ export function createFaceAnalysisLoop(
   }
 
   function stop(subject: FaceLoopSubject): Promise<void> {
-    return enqueueOperation(subject, () => stopNow(subject))
+    return operationQueues[subject].enqueue(() => stopNow(subject))
   }
 
   async function stopNow(subject: FaceLoopSubject): Promise<void> {
@@ -281,19 +282,6 @@ export function createFaceAnalysisLoop(
     session.video.srcObject = null
     session.video.remove()
     await session.analyzer.close?.()
-  }
-
-  function enqueueOperation<T>(
-    subject: FaceLoopSubject,
-    operation: () => Promise<T>
-  ): Promise<T> {
-    const next = operationQueues[subject].catch(() => undefined).then(operation)
-    operationQueues[subject] = next.then(
-      () => undefined,
-      () => undefined
-    )
-
-    return next
   }
 
   return {
