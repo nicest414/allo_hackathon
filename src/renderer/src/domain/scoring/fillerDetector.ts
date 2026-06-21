@@ -30,6 +30,13 @@ const SCORE_PER_FILLER = 15
 /** windowMs 指定時、この時間内のfinalセグメントだけをフィラー集計の対象にする。 */
 export const DEFAULT_FILLER_WINDOW_MS = 10_000
 
+/**
+ * フィラー率の正規化基準となる文字数（短文1文相当）。
+ * 絶対回数だけで採点すると「よく話す人ほど不利」になるため、これより長く話した分は
+ * 文字数に応じてフィラー回数を割り引く（同じ1回でも長時間話した中の1回は軽く扱う）。
+ */
+export const FILLER_RATE_BASELINE_CHARS = 30
+
 export interface DetectFillersOptions {
   /** 直近この時間(ms)内のfinalセグメントのみ集計する。未指定なら全件（後方互換）。 */
   windowMs?: number
@@ -88,9 +95,15 @@ export function detectFillers(
     }
   }
 
+  const totalChars = text.length
+  const normalizedFillerCount =
+    totalChars > FILLER_RATE_BASELINE_CHARS
+      ? fillerCount * (FILLER_RATE_BASELINE_CHARS / totalChars)
+      : fillerCount
+
   return {
     matchedFillers,
     fillerCount,
-    score: clamp(fillerCount * SCORE_PER_FILLER)
+    score: clamp(normalizedFillerCount * SCORE_PER_FILLER)
   }
 }

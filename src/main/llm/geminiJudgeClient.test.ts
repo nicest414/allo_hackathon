@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetMainEnvForTest } from '../env'
-import { createFakeJudgment, judgeResponse, parseJudgmentResult } from './geminiJudgeClient'
+import { buildJudgePrompt, createFakeJudgment, judgeResponse, parseJudgmentResult } from './geminiJudgeClient'
 
 const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__')
 
@@ -41,6 +41,33 @@ describe('parseJudgmentResult', () => {
 
   it('JSONとして不正な応答はエラーにする', () => {
     expect(() => parseJudgmentResult('not json')).toThrow()
+  })
+})
+
+describe('buildJudgePrompt', () => {
+  it('historyが無い場合は質問と回答だけのプロンプトになる', () => {
+    const prompt = buildJudgePrompt({ question: 'Q', answer: 'A' })
+    expect(prompt).not.toContain('これまでの質疑')
+    expect(prompt).toContain('# 質問\nQ')
+    expect(prompt).toContain('# 就活生の返答\nA')
+  })
+
+  it('historyがある場合は質問の前に参考情報として含める', () => {
+    const prompt = buildJudgePrompt({
+      question: 'Q2',
+      answer: 'A2',
+      history: [{ question: 'Q1', answer: 'A1' }]
+    })
+
+    expect(prompt.indexOf('これまでの質疑')).toBeGreaterThanOrEqual(0)
+    expect(prompt.indexOf('これまでの質疑')).toBeLessThan(prompt.indexOf('# 質問\nQ2'))
+    expect(prompt).toContain('Q1: Q1')
+    expect(prompt).toContain('A1: A1')
+  })
+
+  it('historyが空配列の場合は参考情報セクションを含めない', () => {
+    const prompt = buildJudgePrompt({ question: 'Q', answer: 'A', history: [] })
+    expect(prompt).not.toContain('これまでの質疑')
   })
 })
 

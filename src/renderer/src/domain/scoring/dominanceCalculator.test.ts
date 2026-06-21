@@ -13,7 +13,8 @@ const baseInput = {
   candidateFace: { subject: 'candidate', value: 50 } as const,
   interviewerFace: { subject: 'interviewer', value: 50 } as const,
   voice: { value: 50 },
-  filler: { matchedFillers: [], fillerCount: 0, score: 50 }
+  filler: { matchedFillers: [], fillerCount: 0, score: 50 },
+  talkRatio: { candidateChars: 0, interviewerChars: 0, value: 50 }
 }
 
 describe('calculateBaseDominance', () => {
@@ -23,7 +24,8 @@ describe('calculateBaseDominance', () => {
       candidateFace: { subject: 'candidate', value: 100 },
       interviewerFace: { subject: 'interviewer', value: 100 },
       voice: { value: 0 },
-      filler: { matchedFillers: [], fillerCount: 0, score: 0 }
+      filler: { matchedFillers: [], fillerCount: 0, score: 0 },
+      talkRatio: { candidateChars: 100, interviewerChars: 0, value: 100 }
     })
 
     expect(result.value).toBe(100)
@@ -31,7 +33,8 @@ describe('calculateBaseDominance', () => {
       candidateFace: 100,
       interviewerFace: 100,
       voice: 100,
-      filler: 100
+      filler: 100,
+      talkRatio: 100
     })
   })
 
@@ -41,7 +44,8 @@ describe('calculateBaseDominance', () => {
       candidateFace: { subject: 'candidate', value: 0 },
       interviewerFace: { subject: 'interviewer', value: 0 },
       voice: { value: 100 },
-      filler: { matchedFillers: ['なんか'], fillerCount: 20, score: 100 }
+      filler: { matchedFillers: ['なんか'], fillerCount: 20, score: 100 },
+      talkRatio: { candidateChars: 0, interviewerChars: 100, value: 0 }
     })
 
     expect(result.value).toBe(0)
@@ -58,6 +62,15 @@ describe('calculateBaseDominance', () => {
     expect(result.breakdown.filler).toBe(85)
   })
 
+  it('does not invert talkRatio (higher means more candidate speaking time)', () => {
+    const result = calculateBaseDominance({
+      ...baseInput,
+      talkRatio: { candidateChars: 80, interviewerChars: 20, value: 80 }
+    })
+
+    expect(result.breakdown.talkRatio).toBe(80)
+  })
+
   it('base weights sum to 1 so a uniform realtime input maps to itself', () => {
     const totalWeight = Object.values(BASE_DOMINANCE_WEIGHTS).reduce((sum, w) => sum + w, 0)
     expect(totalWeight).toBeCloseTo(1)
@@ -67,7 +80,8 @@ describe('calculateBaseDominance', () => {
       candidateFace: { subject: 'candidate', value: 60 },
       interviewerFace: { subject: 'interviewer', value: 60 },
       voice: { value: 40 }, // inverted -> 60
-      filler: { matchedFillers: [], fillerCount: 0, score: 40 } // inverted -> 60
+      filler: { matchedFillers: [], fillerCount: 0, score: 40 }, // inverted -> 60
+      talkRatio: { candidateChars: 60, interviewerChars: 40, value: 60 }
     })
 
     expect(result.value).toBeCloseTo(60)

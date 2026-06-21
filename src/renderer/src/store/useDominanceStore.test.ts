@@ -11,7 +11,8 @@ describe('useDominanceStore', () => {
       candidateFace: 100,
       interviewerFace: 100,
       voice: 0,
-      filler: 0
+      filler: 0,
+      talkRatio: 100
     })
 
     const state = useDominanceStore.getState()

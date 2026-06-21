@@ -36,7 +36,16 @@ export type SttTranscriptEvent = Pick<TranscriptSegment, 'text' | 'isFinal'> & {
   speaker: SttSpeaker
 }
 
-export type LlmJudgeResponseRequest = Pick<ResponseJudgment, 'question' | 'answer'>
+/** LLM判定に文脈として渡す、直近の質問×回答ペア（古い→新しい順）。 */
+export interface LlmJudgeHistoryTurn {
+  question: string
+  answer: string
+}
+
+export type LlmJudgeResponseRequest = Pick<ResponseJudgment, 'question' | 'answer'> & {
+  /** 文脈依存の質問（指示語・前の回答への言及等）の判定精度向上のための補助情報。任意。 */
+  history?: LlmJudgeHistoryTurn[]
+}
 
 export type LlmJudgeResponseResult = Pick<ResponseJudgment, 'score' | 'reason'>
 
