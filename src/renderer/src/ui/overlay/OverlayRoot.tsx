@@ -27,6 +27,10 @@ import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
 import { useAutoResponseJudge } from '../../hooks/useAutoResponseJudge'
+import {
+  buildCursorTransparencyMaskStyle,
+  type CursorPosition
+} from './cursorTransparencyMask'
 
 export function OverlayRoot(): ReactElement {
   useInitialCandidatePortraitImage()
@@ -58,6 +62,7 @@ export function OverlayRoot(): ReactElement {
   // 表情スコアロジックの生値はターミナルログ用に保持するのみで、画面には出さない。
   const candidateFaceDebugRef = useRef<FaceAnalysisResult | null>(null)
   const interviewerFaceDebugRef = useRef<FaceAnalysisResult | null>(null)
+  const overlayRootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     return faceAnalysisLoop.onAnalysisResult((subject, result) => {
@@ -67,6 +72,106 @@ export function OverlayRoot(): ReactElement {
         interviewerFaceDebugRef.current = result
       }
     })
+  }, [])
+
+  useEffect(() => {
+    let isDisposed = false
+    let isClickThroughEnabled = true
+    const applyCursorMask = (
+      element: HTMLElement,
+      cursorPosition: CursorPosition | null
+    ): void => {
+      if (cursorPosition === null) {
+        element.style.removeProperty('mask-image')
+        element.style.removeProperty('-webkit-mask-image')
+        element.style.removeProperty('mask-mode')
+        element.style.removeProperty('mask-repeat')
+        element.style.removeProperty('-webkit-mask-repeat')
+        element.style.removeProperty('mask-size')
+        element.style.removeProperty('-webkit-mask-size')
+        return
+      }
+
+      const bounds = element.getBoundingClientRect()
+      const maskStyle = buildCursorTransparencyMaskStyle({
+        x: cursorPosition.x - bounds.left,
+        y: cursorPosition.y - bounds.top
+      })
+      const maskImage = maskStyle.maskImage?.toString() ?? ''
+      element.style.setProperty('mask-image', maskImage)
+      element.style.setProperty('-webkit-mask-image', maskImage)
+      element.style.setProperty('mask-mode', 'alpha')
+      element.style.setProperty('mask-repeat', 'no-repeat')
+      element.style.setProperty('-webkit-mask-repeat', 'no-repeat')
+      element.style.setProperty('mask-size', '100% 100%')
+      element.style.setProperty('-webkit-mask-size', '100% 100%')
+    }
+
+    const applyCursorMasks = (cursorPosition: CursorPosition | null): void => {
+      const rootElement = overlayRootRef.current
+      if (!rootElement) {
+        return
+      }
+
+      applyCursorMask(rootElement, cursorPosition)
+      for (const element of rootElement.querySelectorAll<HTMLElement>(
+        '[data-cursor-transparent-mask]'
+      )) {
+        applyCursorMask(element, cursorPosition)
+      }
+    }
+
+    const shouldCaptureClickAtCursor = (cursorPosition: CursorPosition | null): boolean => {
+      if (cursorPosition === null) {
+        return false
+      }
+
+      const interactiveElements = document.querySelectorAll<HTMLElement>(
+        'button, input, textarea, select, [role="button"], [data-overlay-control]'
+      )
+      for (const element of interactiveElements) {
+        const bounds = element.getBoundingClientRect()
+        const isInside =
+          cursorPosition.x >= bounds.left &&
+          cursorPosition.x <= bounds.right &&
+          cursorPosition.y >= bounds.top &&
+          cursorPosition.y <= bounds.bottom
+        if (isInside) {
+          return true
+        }
+      }
+
+      return false
+    }
+
+    const updateClickThrough = (enabled: boolean): void => {
+      if (enabled === isClickThroughEnabled) {
+        return
+      }
+
+      isClickThroughEnabled = enabled
+      void window.allo.overlay.setClickThrough({ enabled })
+    }
+
+    const updateCursorPosition = async (): Promise<void> => {
+      const cursorPosition = await window.allo.overlay.getCursorPosition()
+      if (!isDisposed) {
+        applyCursorMasks(cursorPosition)
+        updateClickThrough(!shouldCaptureClickAtCursor(cursorPosition))
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void updateCursorPosition()
+    }, 33)
+    void updateCursorPosition()
+
+    return () => {
+      isDisposed = true
+      window.clearInterval(intervalId)
+      applyCursorMasks(null)
+      updateClickThrough(true)
+    }
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
   const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
@@ -366,7 +471,7 @@ export function OverlayRoot(): ReactElement {
   }
 
   return (
-    <div style={styles.root}>
+    <div ref={overlayRootRef} style={styles.root}>
       <DominanceClashBanner
         value={baseDominance}
         candidatePortraitSrc={candidatePortraitImageUrl}
@@ -376,8 +481,7 @@ export function OverlayRoot(): ReactElement {
         <div style={styles.values}>優勢度: {Math.round(baseDominance)}</div>
         <div
           style={styles.controls}
-          onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
-          onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
+          data-overlay-control
         >
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (

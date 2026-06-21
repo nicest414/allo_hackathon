@@ -113,6 +113,7 @@ export function DominanceClashBanner({
   return (
     <div
       className={`clash-banner${leadingSide ? ` clash-banner--leading-${leadingSide}` : ''}`}
+      data-cursor-transparent-mask
       role="img"
       aria-label={`優勢度 ${clamped}`}
       style={boundaryVars}

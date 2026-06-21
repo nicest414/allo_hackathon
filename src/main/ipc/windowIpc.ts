@@ -3,7 +3,7 @@ import { IPC_CHANNELS } from '../../shared/types/ipc'
 import type { OverlaySetClickThroughRequest } from '../../shared/types/ipc'
 import { setClickThrough } from '../windows/createOverlayWindow'
 
-const { ipcMain } = electron
+const { ipcMain, screen } = electron
 
 /**
  * renderer⇄main：オーバーレイのクリック透過ON/OFF切り替えipcMainハンドラを登録する。
@@ -19,4 +19,18 @@ export function registerWindowIpc(getOverlayWindow: () => Electron.BrowserWindow
       }
     }
   )
+
+  ipcMain.handle(IPC_CHANNELS.overlayGetCursorPosition, () => {
+    const overlayWindow = getOverlayWindow()
+    if (!overlayWindow) {
+      return null
+    }
+
+    const cursorPoint = screen.getCursorScreenPoint()
+    const bounds = overlayWindow.getBounds()
+    return {
+      x: cursorPoint.x - bounds.x,
+      y: cursorPoint.y - bounds.y
+    }
+  })
 }
