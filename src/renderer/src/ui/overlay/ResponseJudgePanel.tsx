@@ -30,12 +30,7 @@ export function ResponseJudgePanel({ questionDraft = '' }: ResponseJudgePanelPro
   const canJudge = !judging && question.trim() !== '' && answer.trim() !== ''
 
   return (
-    <div
-      style={styles.panel}
-      // 入力操作のためホバー中はクリック透過を切る
-      onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
-      onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
-    >
+    <div style={styles.panel} data-overlay-control>
       <input
         style={styles.input}
         placeholder="面接官の質問"

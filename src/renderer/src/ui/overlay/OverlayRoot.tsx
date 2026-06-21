@@ -91,6 +91,7 @@ export function OverlayRoot(): ReactElement {
 
   useEffect(() => {
     let isDisposed = false
+    let isClickThroughEnabled = true
     const applyCursorMask = (
       element: HTMLElement,
       cursorPosition: CursorPosition | null
@@ -135,10 +136,43 @@ export function OverlayRoot(): ReactElement {
       }
     }
 
+    const shouldCaptureClickAtCursor = (cursorPosition: CursorPosition | null): boolean => {
+      if (cursorPosition === null) {
+        return false
+      }
+
+      const interactiveElements = document.querySelectorAll<HTMLElement>(
+        'button, input, textarea, select, [role="button"], [data-overlay-control]'
+      )
+      for (const element of interactiveElements) {
+        const bounds = element.getBoundingClientRect()
+        const isInside =
+          cursorPosition.x >= bounds.left &&
+          cursorPosition.x <= bounds.right &&
+          cursorPosition.y >= bounds.top &&
+          cursorPosition.y <= bounds.bottom
+        if (isInside) {
+          return true
+        }
+      }
+
+      return false
+    }
+
+    const updateClickThrough = (enabled: boolean): void => {
+      if (enabled === isClickThroughEnabled) {
+        return
+      }
+
+      isClickThroughEnabled = enabled
+      void window.allo.overlay.setClickThrough({ enabled })
+    }
+
     const updateCursorPosition = async (): Promise<void> => {
       const cursorPosition = await window.allo.overlay.getCursorPosition()
       if (!isDisposed) {
         applyCursorMasks(cursorPosition)
+        updateClickThrough(!shouldCaptureClickAtCursor(cursorPosition))
       }
     }
 
@@ -151,6 +185,7 @@ export function OverlayRoot(): ReactElement {
       isDisposed = true
       window.clearInterval(intervalId)
       applyCursorMasks(null)
+      updateClickThrough(true)
     }
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
@@ -419,8 +454,7 @@ export function OverlayRoot(): ReactElement {
         </div>
         <div
           style={styles.controls}
-          onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
-          onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
+          data-overlay-control
         >
           <button onClick={() => setDominance(dominance - 10)}>相手 +10</button>
           <button onClick={() => setDominance(dominance + 10)}>You +10</button>
