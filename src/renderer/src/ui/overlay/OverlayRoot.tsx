@@ -18,7 +18,6 @@ import { candidateMicSttPipeline } from '../../services/candidateMicSttPipeline'
 import { interviewerLoopbackSttPipeline } from '../../services/interviewerLoopbackSttPipeline'
 import { faceAnalysisLoop } from '../../services/faceAnalysisLoop'
 import { voiceAnalysisLoop } from '../../services/voiceAnalysisLoop'
-import { dominanceOrchestrator } from '../../services/dominanceOrchestrator'
 import {
   captureAndStoreCandidatePortrait,
   captureAndStoreInterviewerPortrait
@@ -27,17 +26,12 @@ import { detectFillers, DEFAULT_FILLER_WINDOW_MS } from '../../domain/scoring/fi
 import { useDominanceStore } from '../../store/useDominanceStore'
 import { DominanceClashBanner } from './DominanceClashBanner'
 import { useInitialCandidatePortraitImage } from './useInitialCandidatePortraitImage'
-import { ResponseJudgePanel } from './ResponseJudgePanel'
 import { useAutoResponseJudge } from '../../hooks/useAutoResponseJudge'
-
-const clamp = (value: number): number => Math.min(100, Math.max(0, value))
 
 export function OverlayRoot(): ReactElement {
   useInitialCandidatePortraitImage()
 
   const baseDominance = useDominanceStore((state) => state.baseDominance)
-  const dominance = useDominanceStore((state) => state.dominance)
-  const scores = useDominanceStore((state) => state.scores)
   const candidatePortraitImageUrl = useDominanceStore(
     (state) => state.portraitImageUrls.candidate
   )
@@ -45,12 +39,6 @@ export function OverlayRoot(): ReactElement {
     (state) => state.portraitImageUrls.interviewer
   )
   const setScores = useDominanceStore((state) => state.setScores)
-  const setDominance = useDominanceStore((state) => state.setDominance)
-  const reset = useDominanceStore((state) => state.reset)
-
-  // 実producer（顔分析ループ等）が未実装のため、開発用に候補者顔スコアを手動で動かして
-  // オーケストレーター経由の再計算→ゲージ反映を確認できるようにする。
-  const [candidateFace, setCandidateFace] = useState(50)
   const [faceLoopState, setFaceLoopState] = useState(faceAnalysisLoop.getState())
   const [screenSources, setScreenSources] = useState<DesktopCaptureSource[]>([])
   const [selectedScreenSourceId, setSelectedScreenSourceId] = useState('')
@@ -63,29 +51,59 @@ export function OverlayRoot(): ReactElement {
   )
   const [sttMessage, setSttMessage] = useState('')
   const [interviewerSttMessage, setInterviewerSttMessage] = useState('')
-  const [latestTranscript, setLatestTranscript] = useState('')
-  const [latestInterviewerQuestion, setLatestInterviewerQuestion] = useState('')
   // フィラー検出は確定(final)transcriptの蓄積に対して行うため、最新配列をrefで保持する。
   const finalTranscriptsRef = useRef<TranscriptSegment[]>([])
-  const [fillerSummary, setFillerSummary] = useState('')
   const [voiceLoopState, setVoiceLoopState] = useState(voiceAnalysisLoop.getState())
   const [voiceLoopMessage, setVoiceLoopMessage] = useState('')
-  // 表情スコアロジックの動作確認用（一時的なデバッグ表示）。スコア合成前の生値を見える化する。
-  const [candidateFaceDebug, setCandidateFaceDebug] = useState<FaceAnalysisResult | null>(null)
-  const [interviewerFaceDebug, setInterviewerFaceDebug] = useState<FaceAnalysisResult | null>(null)
+  // 表情スコアロジックの生値はターミナルログ用に保持するのみで、画面には出さない。
+  const candidateFaceDebugRef = useRef<FaceAnalysisResult | null>(null)
+  const interviewerFaceDebugRef = useRef<FaceAnalysisResult | null>(null)
 
   useEffect(() => {
     return faceAnalysisLoop.onAnalysisResult((subject, result) => {
       if (subject === 'candidate') {
-        setCandidateFaceDebug(result)
+        candidateFaceDebugRef.current = result
       } else {
-        setInterviewerFaceDebug(result)
+        interviewerFaceDebugRef.current = result
       }
     })
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
   const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
   const auto = useAutoResponseJudge(autoJudgeEnabled)
+
+  const isInterviewRunning =
+    faceLoopState.candidate ||
+    faceLoopState.interviewer ||
+    sttPipelineState.running ||
+    voiceLoopState.running ||
+    interviewerSttPipelineState.running
+
+  // 生スコア・顔の生値はデバッグ用情報のため、画面表示せずターミナルログにのみ出す。
+  useEffect(() => {
+    if (!isInterviewRunning) {
+      return
+    }
+    const intervalId = setInterval(() => {
+      const { scores } = useDominanceStore.getState()
+      console.log(
+        `[scores] candidateFace=${scores.candidateFace} interviewerFace=${scores.interviewerFace} voice=${scores.voice} filler=${scores.filler} response=${scores.response}`
+      )
+      const cf = candidateFaceDebugRef.current
+      if (cf) {
+        console.log(
+          `[face:candidate] smile=${cf.smileLevel} tension=${cf.tensionLevel} expression=${cf.expression}`
+        )
+      }
+      const iface = interviewerFaceDebugRef.current
+      if (iface) {
+        console.log(
+          `[face:interviewer] smile=${iface.smileLevel} tension=${iface.tensionLevel} expression=${iface.expression}`
+        )
+      }
+    }, 1000)
+    return () => clearInterval(intervalId)
+  }, [isInterviewRunning])
 
   // 直近 windowMs 内のfinal transcriptだけでフィラーを再評価し、Storeへ反映する。
   // 黙る/きれいに話すと古いフィラーが窓から抜けてスコアが下がる（=ゲージが揺れ動く）。
@@ -98,10 +116,10 @@ export function OverlayRoot(): ReactElement {
       windowMs: DEFAULT_FILLER_WINDOW_MS
     })
     setScores({ filler: result.score })
-    setFillerSummary(
+    console.log(
       result.fillerCount > 0
-        ? `フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
-        : 'フィラー未検出'
+        ? `[filler] フィラー ${result.fillerCount}回 (${result.matchedFillers.join('・')}) / score ${result.score}`
+        : '[filler] フィラー未検出'
     )
   }, [setScores])
 
@@ -117,12 +135,6 @@ export function OverlayRoot(): ReactElement {
     }
   }, [recomputeFiller])
 
-  const reportCandidateFace = (next: number): void => {
-    const value = clamp(next)
-    setCandidateFace(value)
-    dominanceOrchestrator.reportCandidateFace({ subject: 'candidate', value })
-  }
-
   const refreshFaceLoopState = (): void => {
     setFaceLoopState(faceAnalysisLoop.getState())
   }
@@ -136,7 +148,7 @@ export function OverlayRoot(): ReactElement {
   }
 
   const handleTranscript = (event: SttTranscriptEvent): void => {
-    setLatestTranscript(event.text)
+    console.log(`[transcript] STT${event.isFinal ? '' : '(interim)'}: ${event.text}`)
 
     // 確定したtranscriptのみフィラー検出の対象に蓄積し、Storeのfillerスコアへ反映する。
     // （優勢度への寄与は dominanceCalculator 側で 100-score に反転される）
@@ -163,13 +175,19 @@ export function OverlayRoot(): ReactElement {
       onTranscript: handleTranscript
     })
     refreshSttPipelineState()
-    setSttMessage(result.ok ? `STT送信中 (${result.sampleRate}Hz)` : result.error.message)
+    if (result.ok) {
+      console.log(`[stt] STT送信中 (${result.sampleRate}Hz)`)
+      setSttMessage('')
+    } else {
+      setSttMessage(result.error.message)
+    }
   }
 
   const stopSttPipeline = async (): Promise<void> => {
     await candidateMicSttPipeline.stop()
     refreshSttPipelineState()
-    setSttMessage('STT送信を停止しました')
+    console.log('[stt] STT送信を停止しました')
+    setSttMessage('')
   }
 
   const refreshVoiceLoopState = (): void => {
@@ -179,19 +197,25 @@ export function OverlayRoot(): ReactElement {
   const startVoiceLoop = async (): Promise<void> => {
     const result = await voiceAnalysisLoop.start({ intervalMs: 500 })
     refreshVoiceLoopState()
-    setVoiceLoopMessage(result.ok ? '声解析中' : result.error.message)
+    if (result.ok) {
+      console.log('[voice] 声解析中')
+      setVoiceLoopMessage('')
+    } else {
+      setVoiceLoopMessage(result.error.message)
+    }
   }
 
   const stopVoiceLoop = async (): Promise<void> => {
     await voiceAnalysisLoop.stop()
     refreshVoiceLoopState()
-    setVoiceLoopMessage('声解析を停止しました')
+    console.log('[voice] 声解析を停止しました')
+    setVoiceLoopMessage('')
   }
 
   const handleInterviewerTranscript = (event: SttTranscriptEvent): void => {
     // 就活生STTと同時に動くため、面接官は「面接官質問」行のみ更新する（STT:行は就活生用）。
     if (event.isFinal && event.text.trim() !== '') {
-      setLatestInterviewerQuestion(event.text)
+      console.log(`[transcript] 面接官質問: ${event.text}`)
       // 自動判定ON時：面接官の確定発話を「質問」として渡す（新ターン開始）。
       auto.reportQuestion(event.text)
     }
@@ -205,17 +229,19 @@ export function OverlayRoot(): ReactElement {
       onTranscript: handleInterviewerTranscript
     })
     refreshInterviewerSttPipelineState()
-    setInterviewerSttMessage(
-      result.ok
-        ? `面接官STT送信中 (${result.sampleRate}Hz)`
-        : result.error.message
-    )
+    if (result.ok) {
+      console.log(`[interviewer-stt] 面接官STT送信中 (${result.sampleRate}Hz)`)
+      setInterviewerSttMessage('')
+    } else {
+      setInterviewerSttMessage(result.error.message)
+    }
   }
 
   const stopInterviewerSttPipeline = async (): Promise<void> => {
     await interviewerLoopbackSttPipeline.stop()
     refreshInterviewerSttPipelineState()
-    setInterviewerSttMessage('面接官STT送信を停止しました')
+    console.log('[interviewer-stt] 面接官STT送信を停止しました')
+    setInterviewerSttMessage('')
   }
 
   const loadScreenSources = async (): Promise<void> => {
@@ -240,11 +266,12 @@ export function OverlayRoot(): ReactElement {
 
       setScreenSources(sources)
       setSelectedScreenSourceId((current) => current || sources[0]?.id || '')
-      setFaceLoopMessage(
-        sources.length === 0
-          ? '共有できる画面ソースが見つかりません'
-          : '面接官画面ソースを更新しました'
-      )
+      if (sources.length === 0) {
+        setFaceLoopMessage('共有できる画面ソースが見つかりません')
+      } else {
+        console.log('[face] 面接官画面ソースを更新しました')
+        setFaceLoopMessage('')
+      }
     } catch (error) {
       setScreenSources([])
       setFaceLoopMessage(
@@ -282,19 +309,24 @@ export function OverlayRoot(): ReactElement {
     if (!interviewerResult.ok) {
       failureMessages.push(`面接官画面解析に失敗しました: ${interviewerResult.error.message}`)
     }
-    setFaceLoopMessage(
-      failureMessages.length > 0 ? failureMessages.join(' / ') : '就活生カメラ・面接官画面の解析中'
-    )
+    if (failureMessages.length > 0) {
+      setFaceLoopMessage(failureMessages.join(' / '))
+    } else {
+      console.log('[face] 就活生カメラ・面接官画面の解析中')
+      setFaceLoopMessage('')
+    }
   }
 
   const stopCandidateAndInterviewerFaceLoops = async (): Promise<void> => {
     await faceAnalysisLoop.stopAll()
     refreshFaceLoopState()
-    setFaceLoopMessage('就活生カメラ・面接官画面の解析を停止しました')
+    console.log('[face] 就活生カメラ・面接官画面の解析を停止しました')
+    setFaceLoopMessage('')
   }
 
   const retakeCandidateAndInterviewerPortraits = async (): Promise<void> => {
-    setFaceLoopMessage('顔写真を再取得しています…')
+    console.log('[face] 顔写真を再取得しています…')
+    setFaceLoopMessage('')
 
     const candidateImageUrl = await captureAndStoreCandidatePortrait()
     const interviewerImageUrl = selectedScreenSourceId
@@ -311,51 +343,42 @@ export function OverlayRoot(): ReactElement {
       failureMessages.push('面接官の顔写真の再取得に失敗しました')
     }
 
-    setFaceLoopMessage(
-      failureMessages.length > 0 ? failureMessages.join(' / ') : '顔写真を再取得しました'
-    )
+    if (failureMessages.length > 0) {
+      setFaceLoopMessage(failureMessages.join(' / '))
+    } else {
+      console.log('[face] 顔写真を再取得しました')
+      setFaceLoopMessage('')
+    }
   }
 
-  const handleReset = async (): Promise<void> => {
-    await faceAnalysisLoop.stopAll()
-    await voiceAnalysisLoop.stop()
-    await candidateMicSttPipeline.stop()
-    await interviewerLoopbackSttPipeline.stop()
-    dominanceOrchestrator.reset()
-    setCandidateFace(50)
-    refreshFaceLoopState()
-    refreshVoiceLoopState()
-    refreshSttPipelineState()
-    refreshInterviewerSttPipelineState()
-    setLatestTranscript('')
-    setLatestInterviewerQuestion('')
-    finalTranscriptsRef.current = []
-    setFillerSummary('')
-    setVoiceLoopMessage('')
-    auto.reset()
-    reset()
+  const startInterview = async (): Promise<void> => {
+    await startCandidateAndInterviewerFaceLoops()
+    await startSttPipeline()
+    await startVoiceLoop()
+    await startInterviewerSttPipeline()
+  }
+
+  const stopInterview = async (): Promise<void> => {
+    await stopCandidateAndInterviewerFaceLoops()
+    await stopSttPipeline()
+    await stopVoiceLoop()
+    await stopInterviewerSttPipeline()
   }
 
   return (
     <div style={styles.root}>
       <DominanceClashBanner
-        value={dominance}
+        value={baseDominance}
         candidatePortraitSrc={candidatePortraitImageUrl}
         interviewerPortraitSrc={interviewerPortraitImageUrl}
       />
       <div style={styles.content}>
-        <div style={styles.values}>
-          優勢度: {dominance}（基礎: {baseDominance}）
-        </div>
+        <div style={styles.values}>優勢度: {Math.round(baseDominance)}</div>
         <div
           style={styles.controls}
           onMouseEnter={() => void window.allo.overlay.setClickThrough({ enabled: false })}
           onMouseLeave={() => void window.allo.overlay.setClickThrough({ enabled: true })}
         >
-          <button onClick={() => setDominance(dominance - 10)}>相手 +10</button>
-          <button onClick={() => setDominance(dominance + 10)}>You +10</button>
-          <button onClick={() => reportCandidateFace(candidateFace - 10)}>顔 -10（dev）</button>
-          <button onClick={() => reportCandidateFace(candidateFace + 10)}>顔 +10（dev）</button>
           <button onClick={() => void loadScreenSources()}>画面取得</button>
           {screenAccessDenied ? (
             <button onClick={() => void openScreenSettings()}>許可設定を開く</button>
@@ -371,37 +394,27 @@ export function OverlayRoot(): ReactElement {
               </option>
             ))}
           </select>
-          {faceLoopState.candidate || faceLoopState.interviewer ? (
-            <button onClick={() => void stopCandidateAndInterviewerFaceLoops()}>
-              カメラ・面接官停止
-            </button>
-          ) : (
-            <button onClick={() => void startCandidateAndInterviewerFaceLoops()}>
-              カメラ・面接官開始
-            </button>
-          )}
           <button onClick={() => void retakeCandidateAndInterviewerPortraits()}>
             顔写真再取得
           </button>
-          {sttPipelineState.running ? (
-            <button onClick={() => void stopSttPipeline()}>STT停止</button>
+          {isInterviewRunning ? (
+            <button onClick={() => void stopInterview()}>面接終了</button>
           ) : (
-            <button onClick={() => void startSttPipeline()}>STT開始</button>
+            <button onClick={() => void startInterview()}>面接開始</button>
           )}
-          {voiceLoopState.running ? (
-            <button onClick={() => void stopVoiceLoop()}>声解析停止</button>
-          ) : (
-            <button onClick={() => void startVoiceLoop()}>声解析開始</button>
-          )}
-          {interviewerSttPipelineState.running ? (
-            <button onClick={() => void stopInterviewerSttPipeline()}>面接官STT停止</button>
-          ) : (
-            <button onClick={() => void startInterviewerSttPipeline()}>面接官STT開始</button>
-          )}
-          <button onClick={() => setAutoJudgeEnabled((value) => !value)}>
+          <button
+            onClick={() =>
+              setAutoJudgeEnabled((value) => {
+                const next = !value
+                console.log(
+                  `[auto-judge] 自動判定: ${next ? 'ON（沈黙2.5秒で発火）' : 'OFF'}`
+                )
+                return next
+              })
+            }
+          >
             自動判定: {autoJudgeEnabled ? 'ON' : 'OFF'}
           </button>
-          <button onClick={handleReset}>リセット</button>
         </div>
         {faceLoopMessage ? <div style={styles.faceLoopMessage}>{faceLoopMessage}</div> : null}
         {voiceLoopMessage ? <div style={styles.sttMessage}>{voiceLoopMessage}</div> : null}
@@ -409,41 +422,11 @@ export function OverlayRoot(): ReactElement {
         {interviewerSttMessage ? (
           <div style={styles.sttMessage}>{interviewerSttMessage}</div>
         ) : null}
-        {latestTranscript ? (
-          <div style={styles.transcript}>STT: {latestTranscript}</div>
-        ) : null}
-        {latestInterviewerQuestion ? (
-          <div style={styles.transcript}>面接官質問: {latestInterviewerQuestion}</div>
-        ) : null}
-        {fillerSummary ? <div style={styles.sttMessage}>{fillerSummary}</div> : null}
-        {autoJudgeEnabled ? (
-          <div style={styles.sttMessage}>
-            自動判定ON（沈黙2.5秒で発火）
-            {auto.judging ? ' — 判定中…' : ''}
-            {auto.score !== null ? ` / response: ${auto.score}` : ''}
-            {auto.reason ? ` — ${auto.reason}` : ''}
+        {auto.judging || auto.score !== null ? (
+          <div style={styles.llmResult}>
+            LLM判定: {auto.judging ? '判定中…' : `${auto.score}点${auto.reason ? ` — ${auto.reason}` : ''}`}
           </div>
         ) : null}
-        <ul style={styles.scores}>
-          {Object.entries(scores).map(([key, value]) => (
-            <li key={key}>
-              {key}: {value}
-            </li>
-          ))}
-        </ul>
-        {candidateFaceDebug ? (
-          <div style={styles.faceLoopMessage}>
-            顔(自分) 生値: smile={candidateFaceDebug.smileLevel} tension=
-            {candidateFaceDebug.tensionLevel} expression={candidateFaceDebug.expression}
-          </div>
-        ) : null}
-        {interviewerFaceDebug ? (
-          <div style={styles.faceLoopMessage}>
-            顔(相手) 生値: smile={interviewerFaceDebug.smileLevel} tension=
-            {interviewerFaceDebug.tensionLevel} expression={interviewerFaceDebug.expression}
-          </div>
-        ) : null}
-        <ResponseJudgePanel questionDraft={latestInterviewerQuestion} />
       </div>
     </div>
   )
@@ -485,21 +468,11 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: 'sans-serif',
     fontSize: '12px'
   },
-  transcript: {
+  llmResult: {
     color: '#ffffff',
     fontFamily: 'sans-serif',
-    fontSize: '12px',
+    fontSize: '13px',
     maxWidth: '720px',
     overflowWrap: 'anywhere'
-  },
-  scores: {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    color: '#ffffff',
-    fontFamily: 'sans-serif',
-    fontSize: '12px',
-    display: 'flex',
-    gap: '12px'
   }
 }

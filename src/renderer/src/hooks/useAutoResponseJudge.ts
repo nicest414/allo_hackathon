@@ -30,7 +30,6 @@ export interface AutoResponseJudgeView {
 /**
  * 面接官の質問×就活生の回答を沈黙検知で自動判定するフック。
  * enabled=false の間は reportQuestion/reportAnswer がトラッカーを動かさず、LLMを一切呼ばない。
- * 判定経路（responseJudger→reportResponse）は useResponseJudge と同一で、優勢度へ反映される。
  */
 export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
   const judger = useMemo(() => createResponseJudger(), [])
@@ -42,10 +41,12 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
 
   const runJudge = useCallback(
     async (request: LlmJudgeResponseRequest): Promise<void> => {
+      console.log(`[auto-judge] 判定中… question="${request.question}" answer="${request.answer}"`)
       setJudging(true)
       try {
         const outcome = await judger.judge(request)
         if (outcome.status === 'skipped') {
+          console.log('[auto-judge] スキップ')
           return
         }
 
@@ -58,6 +59,7 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
         dominanceOrchestrator.reportResponse(responseScore)
         setScore(responseScore)
         setReason(outcome.result.reason)
+        console.log(`[auto-judge] response=${responseScore} reason=${outcome.result.reason}`)
       } finally {
         setJudging(false)
       }
