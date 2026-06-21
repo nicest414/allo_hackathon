@@ -69,7 +69,8 @@ const initialScores: DominanceScores = {
 }
 
 function calculateDominanceState(
-  scores: DominanceScores
+  scores: DominanceScores,
+  accumulatedResponseScore: number | undefined
 ): Pick<DominanceState, 'baseDominance' | 'dominance'> {
   const input = {
     timestamp: Date.now(),
@@ -78,7 +79,9 @@ function calculateDominanceState(
     voice: { value: scores.voice },
     filler: { matchedFillers: [], fillerCount: 0, score: scores.filler },
     talkRatio: { candidateChars: 0, interviewerChars: 0, value: scores.talkRatio },
-    response: scores.response
+    // scores.responseはLLM未到達でも中立50で初期化されているため、ここでは「LLM判定が
+    // 実際に届いたか」を示すaccumulatedResponseScore(未到達ならundefined)を渡す。
+    response: accumulatedResponseScore
   }
   const base = calculateBaseDominance(input)
   const corrected = calculateDominance(input)
@@ -146,7 +149,7 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
         }
       }
 
-      const calculated = calculateDominanceState(next)
+      const calculated = calculateDominanceState(next, accumulatedResponseScore)
       
       if (state.dominance !== calculated.dominance) {
         store.addLog(`[Overall Dominance] ${calculated.dominance} (was ${state.dominance})`, 'info')

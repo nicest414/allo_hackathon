@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   BASE_DOMINANCE_WEIGHTS,
   accumulateResponseScore,
-  applyResponseCorrection,
+  applyRealtimeFineTune,
   calculateBaseDominance,
   calculateDominance,
-  calculateResponseCorrection
+  calculateRealtimeFineTune
 } from './dominanceCalculator'
 
 const baseInput = {
@@ -88,29 +88,28 @@ describe('calculateBaseDominance', () => {
   })
 })
 
-describe('calculateResponseCorrection', () => {
-  it('returns 0 when the response score is missing (no correction)', () => {
-    expect(calculateResponseCorrection(undefined)).toBe(0)
-    expect(calculateResponseCorrection(Number.NaN)).toBe(0)
+describe('calculateRealtimeFineTune', () => {
+  it('returns 0 when the realtime base value is neutral', () => {
+    expect(calculateRealtimeFineTune(50)).toBe(0)
   })
 
-  it('adds when above neutral and subtracts when below neutral', () => {
-    expect(calculateResponseCorrection(100)).toBeCloseTo(20) // (100-50)*0.4
-    expect(calculateResponseCorrection(0)).toBeCloseTo(-20)
-    expect(calculateResponseCorrection(50)).toBe(0)
+  it('adds when the base value is above neutral and subtracts when below', () => {
+    expect(calculateRealtimeFineTune(100)).toBeCloseTo(10) // (100-50)*0.2
+    expect(calculateRealtimeFineTune(0)).toBeCloseTo(-10)
   })
 })
 
-describe('applyResponseCorrection', () => {
-  it('shifts the base value by the correction and clamps to 0-100', () => {
-    expect(applyResponseCorrection(50, 100)).toBe(70)
-    expect(applyResponseCorrection(50, 0)).toBe(30)
-    expect(applyResponseCorrection(95, 100)).toBe(100) // clamped
-    expect(applyResponseCorrection(5, 0)).toBe(0) // clamped
+describe('applyRealtimeFineTune', () => {
+  it('shifts the LLM response score by the realtime fine-tune and clamps to 0-100', () => {
+    expect(applyRealtimeFineTune(50, 100)).toBe(60)
+    expect(applyRealtimeFineTune(50, 0)).toBe(40)
+    expect(applyRealtimeFineTune(95, 100)).toBe(100) // clamped
+    expect(applyRealtimeFineTune(5, 0)).toBe(0) // clamped
   })
 
-  it('leaves the base value unchanged when no response score', () => {
-    expect(applyResponseCorrection(63, undefined)).toBe(63)
+  it('keeps the LLM score dominant: a strong answer stays high even with weak delivery', () => {
+    // response=85, base=30(緊張気味) -> 微調整は-4止まりで85付近を保つ
+    expect(applyRealtimeFineTune(85, 30)).toBe(81)
   })
 })
 
@@ -126,15 +125,15 @@ describe('accumulateResponseScore', () => {
 })
 
 describe('calculateDominance (two-stage convenience)', () => {
-  it('applies the LLM correction on top of the base dominance', () => {
+  it('makes the LLM response score the primary value once it arrives', () => {
     const result = calculateDominance({ ...baseInput, response: 100 })
 
-    // base is 50 (uniform), correction +20 -> 70
-    expect(result.value).toBe(70)
+    // base is 50 (uniform) -> fine-tune is 0, so the LLM score passes through
+    expect(result.value).toBe(100)
     expect(result.breakdown.response).toBe(100)
   })
 
-  it('uses neutral response in the breakdown and no correction when response is missing', () => {
+  it('falls back to the realtime base value when response is missing', () => {
     const result = calculateDominance(baseInput)
 
     expect(result.value).toBe(50)

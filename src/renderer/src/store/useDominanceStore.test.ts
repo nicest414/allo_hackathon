@@ -20,23 +20,24 @@ describe('useDominanceStore', () => {
     expect(state.dominance).toBe(100)
   })
 
-  it('applies response correction to the displayed dominance', () => {
+  it('makes the LLM response score the primary displayed dominance once it arrives', () => {
     useDominanceStore.getState().setScores({ response: 100 })
 
     const state = useDominanceStore.getState()
     expect(state.baseDominance).toBe(50)
-    expect(state.dominance).toBe(70)
+    // base(50)は中立なので微調整は0、LLMスコアがそのまま優勢度になる
+    expect(state.dominance).toBe(100)
     expect(state.scores.response).toBe(100)
   })
 
-  it('accumulates repeated response scores with EMA before applying correction', () => {
+  it('accumulates repeated response scores with EMA before applying the fine-tune', () => {
     const store = useDominanceStore.getState()
     store.setScores({ response: 100 })
     store.setScores({ response: 0 })
 
     const state = useDominanceStore.getState()
     expect(state.scores.response).toBe(40)
-    expect(state.dominance).toBe(46)
+    expect(state.dominance).toBe(40)
   })
 
   it('keeps portrait image URLs when dominance scores reset', () => {
