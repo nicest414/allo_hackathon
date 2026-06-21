@@ -49,6 +49,8 @@ export interface FaceAnalysisLoop {
   getState(): FaceAnalysisLoopState
   /** デバッグ用: スコア合成前の生の解析結果(smileLevel/tensionLevel/expression)を購読する。解除関数を返す。 */
   onAnalysisResult(listener: (subject: FaceLoopSubject, result: FaceAnalysisResult) => void): () => void
+  /** 解析中のライブMediaStreamを返す（リアルタイム顔表示用・二重キャプチャ回避）。未起動はundefined。 */
+  getStream(subject: FaceLoopSubject): MediaStream | undefined
 }
 
 interface FaceAnalysisLoopDependencies {
@@ -311,7 +313,8 @@ export function createFaceAnalysisLoop(
     onAnalysisResult: (listener) => {
       analysisListeners.add(listener)
       return () => analysisListeners.delete(listener)
-    }
+    },
+    getStream: (subject) => sessions[subject]?.stream
   }
 }
 

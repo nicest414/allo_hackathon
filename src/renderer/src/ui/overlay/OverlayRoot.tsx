@@ -68,6 +68,10 @@ export function OverlayRoot(): ReactElement {
       }
     })
   }, [])
+
+  // バナーのライブ顔クロップ用：描画ループが毎フレーム最新の顔枠を読むgetter（再レンダー不要）。
+  const getCandidateFaceBox = useCallback(() => candidateFaceDebugRef.current?.faceBox, [])
+  const getInterviewerFaceBox = useCallback(() => interviewerFaceDebugRef.current?.faceBox, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
   const [autoJudgeEnabled, setAutoJudgeEnabled] = useState(false)
   const auto = useAutoResponseJudge(autoJudgeEnabled)
@@ -371,6 +375,16 @@ export function OverlayRoot(): ReactElement {
         value={baseDominance}
         candidatePortraitSrc={candidatePortraitImageUrl}
         interviewerPortraitSrc={interviewerPortraitImageUrl}
+        candidateActive={faceLoopState.candidate}
+        interviewerActive={faceLoopState.interviewer}
+        candidateStream={
+          faceLoopState.candidate ? faceAnalysisLoop.getStream('candidate') : undefined
+        }
+        interviewerStream={
+          faceLoopState.interviewer ? faceAnalysisLoop.getStream('interviewer') : undefined
+        }
+        getCandidateFaceBox={getCandidateFaceBox}
+        getInterviewerFaceBox={getInterviewerFaceBox}
       />
       <div style={styles.content}>
         <div style={styles.values}>優勢度: {Math.round(baseDominance)}</div>

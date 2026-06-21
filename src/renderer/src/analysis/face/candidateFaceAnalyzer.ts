@@ -1,5 +1,61 @@
-import type { AnalysisSubject, FaceAnalysisResult } from '../../../../shared/types/analysis'
-import type { FaceLandmarker, FaceLandmarkerInput, FaceLandmarkerResult } from './faceLandmarker'
+import type {
+  AnalysisSubject,
+  FaceAnalysisResult,
+  NormalizedFaceBox
+} from '../../../../shared/types/analysis'
+import type {
+  FaceLandmarker,
+  FaceLandmarkerInput,
+  FaceLandmarkerResult,
+  NormalizedFaceLandmark
+} from './faceLandmarker'
+
+const DEFAULT_FACE_BOX_PADDING_RATIO = 0.35
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
+
+/**
+ * ランドマークの外接矩形にパディングを付けた正方形の顔枠を、0-1の正規化座標で返す。
+ * ライブ顔クロップ表示で映像サイズに掛けて使う（capture/portraitFrame の pixel版と同等の考え方）。
+ */
+export function calculateNormalizedFaceBox(
+  landmarks: NormalizedFaceLandmark[],
+  paddingRatio = DEFAULT_FACE_BOX_PADDING_RATIO
+): NormalizedFaceBox | undefined {
+  if (landmarks.length === 0) {
+    return undefined
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const landmark of landmarks) {
+    minX = Math.min(minX, landmark.x)
+    minY = Math.min(minY, landmark.y)
+    maxX = Math.max(maxX, landmark.x)
+    maxY = Math.max(maxY, landmark.y)
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return undefined
+  }
+
+  const faceWidth = clamp01(maxX) - clamp01(minX)
+  const faceHeight = clamp01(maxY) - clamp01(minY)
+  if (faceWidth <= 0 || faceHeight <= 0) {
+    return undefined
+  }
+
+  const centerX = (clamp01(minX) + clamp01(maxX)) / 2
+  const centerY = (clamp01(minY) + clamp01(maxY)) / 2
+  // 正方形クロップにするため長辺基準。パディングを付けてから1.0以内に収める。
+  const size = Math.min(1, Math.max(faceWidth, faceHeight) * (1 + Math.max(0, paddingRatio) * 2))
+  const x = Math.min(Math.max(centerX - size / 2, 0), 1 - size)
+  const y = Math.min(Math.max(centerY - size / 2, 0), 1 - size)
+
+  return { x, y, width: size, height: size }
+}
 
 export interface FaceAnalyzerOptions {
   landmarker: FaceLandmarker
@@ -67,7 +123,8 @@ export function toFaceAnalysisResult(
     timestamp: result.timestamp,
     tensionLevel,
     smileLevel,
-    expression
+    expression,
+    faceBox: calculateNormalizedFaceBox(result.landmarks)
   }
 }
 

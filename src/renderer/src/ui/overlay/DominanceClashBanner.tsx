@@ -1,13 +1,24 @@
 import type { CSSProperties, ReactElement } from 'react'
 import './DominanceClashBanner.css'
+import type { NormalizedFaceBox } from '../../../../shared/types/analysis'
+import { LiveFacePortrait } from './LiveFacePortrait'
 import leftPortrait from '../../assets/portrait/left.png'
 import rightPortrait from '../../assets/portrait/right.png'
 import lightningVideo from '../../assets/video/lightning_transparent.webm'
 
 interface DominanceClashBannerProps {
   value: number
+  /** 停止中の静止画フォールバック（撮影済みポートレート）。 */
   candidatePortraitSrc?: string
   interviewerPortraitSrc?: string
+  /** 解析中のライブ表示用（faceAnalysisLoopから共有のストリーム＋最新顔枠getter）。 */
+  candidateStream?: MediaStream
+  interviewerStream?: MediaStream
+  /** 描画ループが毎フレーム最新の顔枠を読むgetter（再レンダー不要）。 */
+  getCandidateFaceBox?: () => NormalizedFaceBox | undefined
+  getInterviewerFaceBox?: () => NormalizedFaceBox | undefined
+  candidateActive?: boolean
+  interviewerActive?: boolean
 }
 
 interface ClashBannerStyle extends CSSProperties {
@@ -88,7 +99,13 @@ function BoltGroup({ paths }: { paths: string[] }): ReactElement {
 export function DominanceClashBanner({
   value,
   candidatePortraitSrc,
-  interviewerPortraitSrc
+  interviewerPortraitSrc,
+  candidateStream,
+  interviewerStream,
+  getCandidateFaceBox,
+  getInterviewerFaceBox,
+  candidateActive = false,
+  interviewerActive = false
 }: DominanceClashBannerProps): ReactElement {
   const clamped = Math.min(100, Math.max(0, Math.round(value)))
   // value(優勢度)は100=候補者(You/左)が完全優勢、0=面接官(相手/右)が完全優勢
@@ -107,8 +124,9 @@ export function DominanceClashBanner({
   }
   const leftPortraitSrc = candidatePortraitSrc ?? leftPortrait
   const rightPortraitSrc = interviewerPortraitSrc ?? rightPortrait
-  const isLeftPortraitCaptured = candidatePortraitSrc !== undefined
-  const isRightPortraitCaptured = interviewerPortraitSrc !== undefined
+  // ライブ表示中、または撮影済みポートレートがある場合は「実写顔」扱いのスタイルにする。
+  const isLeftPortraitCaptured = candidatePortraitSrc !== undefined || (candidateActive && candidateStream !== undefined)
+  const isRightPortraitCaptured = interviewerPortraitSrc !== undefined || (interviewerActive && interviewerStream !== undefined)
 
   return (
     <div
@@ -128,23 +146,26 @@ export function DominanceClashBanner({
         <div className="clash-banner__sweep" />
       </div>
       <div className="clash-banner__portrait-mask clash-banner__portrait-mask--left">
-        <img
+        <LiveFacePortrait
           className={`clash-banner__portrait clash-banner__portrait--left${
             isLeftPortraitCaptured ? ' clash-banner__portrait--captured' : ''
           }`}
-          src={leftPortraitSrc}
-          alt=""
-          aria-hidden="true"
+          active={candidateActive}
+          stream={candidateStream}
+          getFaceBox={getCandidateFaceBox}
+          fallbackSrc={leftPortraitSrc}
+          mirrored
         />
       </div>
       <div className="clash-banner__portrait-mask clash-banner__portrait-mask--right">
-        <img
+        <LiveFacePortrait
           className={`clash-banner__portrait clash-banner__portrait--right${
             isRightPortraitCaptured ? ' clash-banner__portrait--captured' : ''
           }`}
-          src={rightPortraitSrc}
-          alt=""
-          aria-hidden="true"
+          active={interviewerActive}
+          stream={interviewerStream}
+          getFaceBox={getInterviewerFaceBox}
+          fallbackSrc={rightPortraitSrc}
         />
       </div>
       <div className="clash-banner__clash">

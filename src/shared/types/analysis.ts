@@ -4,12 +4,22 @@ export type AnalysisSubject = 'candidate' | 'interviewer'
 
 export type FaceExpressionLabel = 'neutral' | 'smile' | 'tense' | 'surprised' | 'unknown'
 
+/** 顔の領域を映像サイズに対する0-1の正規化座標で表す枠（ライブ顔クロップ表示用）。 */
+export interface NormalizedFaceBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface FaceAnalysisResult {
   subject: AnalysisSubject
   timestamp: number
   tensionLevel: number // 0-100 焦り度
   smileLevel: number // 0-100 笑顔度
   expression: FaceExpressionLabel
+  /** 検出した顔の正規化枠（0-1）。顔未検出時は undefined。リアルタイム顔クロップ表示に使う。 */
+  faceBox?: NormalizedFaceBox
 }
 
 export interface FaceScore {
