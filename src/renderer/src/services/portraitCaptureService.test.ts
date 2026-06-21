@@ -7,15 +7,18 @@ vi.mock('../analysis/face/mediapipeFaceLandmarker', () => ({
 
 vi.mock('../capture/portraitFrame', () => ({
   captureCandidatePortraitImage: vi.fn(),
-  captureInterviewerPortraitImage: vi.fn()
+  captureInterviewerPortraitImage: vi.fn(),
+  captureManualPortraitImage: vi.fn()
 }))
 
 import { createMediaPipeFaceLandmarker } from '../analysis/face/mediapipeFaceLandmarker'
 import {
   captureCandidatePortraitImage,
-  captureInterviewerPortraitImage
+  captureInterviewerPortraitImage,
+  captureManualPortraitImage
 } from '../capture/portraitFrame'
 import {
+  applyManualInterviewerPortraitRect,
   captureAndStoreCandidatePortrait,
   captureAndStoreInterviewerPortrait
 } from './portraitCaptureService'
@@ -23,6 +26,7 @@ import {
 const createLandmarker = vi.mocked(createMediaPipeFaceLandmarker)
 const captureCandidate = vi.mocked(captureCandidatePortraitImage)
 const captureInterviewer = vi.mocked(captureInterviewerPortraitImage)
+const captureManual = vi.mocked(captureManualPortraitImage)
 const close = vi.fn()
 
 describe('portraitCaptureService', () => {
@@ -32,6 +36,7 @@ describe('portraitCaptureService', () => {
     createLandmarker.mockReset()
     captureCandidate.mockReset()
     captureInterviewer.mockReset()
+    captureManual.mockReset()
     close.mockReset()
     createLandmarker.mockResolvedValue({ detect: vi.fn(), close })
   })
@@ -80,17 +85,80 @@ describe('portraitCaptureService', () => {
       expect(captureInterviewer).toHaveBeenCalledWith(
         expect.objectContaining({ sourceId: 'screen:1' })
       )
-      expect(result).toBe('interviewer.png')
+      expect(result).toEqual({ kind: 'stored', imageUrl: 'interviewer.png' })
       expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBe('interviewer.png')
     })
 
-    it('returns undefined and leaves the store untouched when capture fails', async () => {
+    it('returns a failed result and leaves the store untouched when capture fails', async () => {
       captureInterviewer.mockResolvedValue({
         ok: false,
         error: { code: 'unknown', message: 'failed' }
       })
 
       const result = await captureAndStoreInterviewerPortrait({ sourceId: 'screen:1' })
+
+      expect(result).toEqual({ kind: 'failed' })
+      expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBeUndefined()
+    })
+
+    it('returns manual-required without touching the store when auto-detection needs manual input', async () => {
+      captureInterviewer.mockResolvedValue({
+        ok: true,
+        stream: {
+          kind: 'manual-required',
+          rawFrameDataUrl: 'data:image/png;base64,raw',
+          sourceWidth: 1280,
+          sourceHeight: 720
+        }
+      })
+
+      const result = await captureAndStoreInterviewerPortrait({
+        sourceId: 'screen:1',
+        allowManualFallback: true
+      })
+
+      expect(result).toEqual({
+        kind: 'manual-required',
+        rawFrameDataUrl: 'data:image/png;base64,raw',
+        sourceWidth: 1280,
+        sourceHeight: 720
+      })
+      expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBeUndefined()
+    })
+
+    it('passes through manualRect and allowManualFallback to the capture function', async () => {
+      captureInterviewer.mockResolvedValue({ ok: true, stream: 'interviewer.png' })
+      const manualRect = { x: 0.1, y: 0.2, width: 0.3, height: 0.3 }
+
+      await captureAndStoreInterviewerPortrait({
+        sourceId: 'screen:1',
+        manualRect,
+        allowManualFallback: true
+      })
+
+      expect(captureInterviewer).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceId: 'screen:1', manualRect, allowManualFallback: true })
+      )
+    })
+  })
+
+  describe('applyManualInterviewerPortraitRect', () => {
+    it('crops the raw frame and stores the resulting image', async () => {
+      captureManual.mockResolvedValue('cropped.png')
+      const rect = { x: 0.1, y: 0.2, width: 0.3, height: 0.3 }
+
+      const result = await applyManualInterviewerPortraitRect('data:image/png;base64,raw', rect)
+
+      expect(captureManual).toHaveBeenCalledWith('data:image/png;base64,raw', rect)
+      expect(result).toBe('cropped.png')
+      expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBe('cropped.png')
+    })
+
+    it('returns undefined and leaves the store untouched when cropping fails', async () => {
+      captureManual.mockRejectedValue(new Error('crop failed'))
+      const rect = { x: 0.1, y: 0.2, width: 0.3, height: 0.3 }
+
+      const result = await applyManualInterviewerPortraitRect('data:image/png;base64,raw', rect)
 
       expect(result).toBeUndefined()
       expect(useDominanceStore.getState().portraitImageUrls.interviewer).toBeUndefined()

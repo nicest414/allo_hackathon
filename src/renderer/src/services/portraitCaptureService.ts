@@ -2,40 +2,83 @@ import { createMediaPipeFaceLandmarker } from '../analysis/face/mediapipeFaceLan
 import type { FaceLandmarker } from '../analysis/face/faceLandmarker'
 import {
   captureCandidatePortraitImage,
-  captureInterviewerPortraitImage
+  captureInterviewerPortraitImage,
+  captureManualPortraitImage,
+  type NormalizedRect,
+  type PortraitManualCropRequired
 } from '../capture/portraitFrame'
 import type { CaptureResult } from '../capture/types'
 import { useDominanceStore } from '../store/useDominanceStore'
 
 export async function captureAndStoreCandidatePortrait(): Promise<string | undefined> {
-  const imageUrl = await captureWithMediaPipeFaceLandmarker((landmarker) =>
+  const result = await captureWithMediaPipeFaceLandmarker((landmarker) =>
     captureCandidatePortraitImage({ landmarker })
   )
 
-  if (imageUrl !== undefined) {
-    useDominanceStore.getState().setCandidatePortraitImageUrl(imageUrl)
+  if (result !== undefined) {
+    useDominanceStore.getState().setCandidatePortraitImageUrl(result)
   }
 
-  return imageUrl
+  return result
 }
+
+export type InterviewerPortraitCaptureResult =
+  | { kind: 'stored'; imageUrl: string }
+  | { kind: 'manual-required'; rawFrameDataUrl: string; sourceWidth: number; sourceHeight: number }
+  | { kind: 'failed' }
 
 export async function captureAndStoreInterviewerPortrait(params: {
   sourceId: string
-}): Promise<string | undefined> {
-  const imageUrl = await captureWithMediaPipeFaceLandmarker((landmarker) =>
-    captureInterviewerPortraitImage({ landmarker, sourceId: params.sourceId })
+  manualRect?: NormalizedRect
+  allowManualFallback?: boolean
+}): Promise<InterviewerPortraitCaptureResult> {
+  const result = await captureWithMediaPipeFaceLandmarker((landmarker) =>
+    captureInterviewerPortraitImage({
+      landmarker,
+      sourceId: params.sourceId,
+      manualRect: params.manualRect,
+      allowManualFallback: params.allowManualFallback
+    })
   )
 
-  if (imageUrl !== undefined) {
-    useDominanceStore.getState().setInterviewerPortraitImageUrl(imageUrl)
+  if (result === undefined) {
+    return { kind: 'failed' }
   }
 
-  return imageUrl
+  if (typeof result === 'string') {
+    useDominanceStore.getState().setInterviewerPortraitImageUrl(result)
+    return { kind: 'stored', imageUrl: result }
+  }
+
+  return {
+    kind: 'manual-required',
+    rawFrameDataUrl: result.rawFrameDataUrl,
+    sourceWidth: result.sourceWidth,
+    sourceHeight: result.sourceHeight
+  }
 }
 
-async function captureWithMediaPipeFaceLandmarker(
-  capture: (landmarker: FaceLandmarker | undefined) => Promise<CaptureResult<string>>
+/**
+ * 手動範囲指定ダイアログで確定したrectを、既に手元にある生フレームに適用してストアへ保存する。
+ * 生フレームは取得済みのため、画面ストリームを再キャプチャしない。
+ */
+export async function applyManualInterviewerPortraitRect(
+  rawFrameDataUrl: string,
+  rect: NormalizedRect
 ): Promise<string | undefined> {
+  try {
+    const imageUrl = await captureManualPortraitImage(rawFrameDataUrl, rect)
+    useDominanceStore.getState().setInterviewerPortraitImageUrl(imageUrl)
+    return imageUrl
+  } catch (error) {
+    console.warn('Failed to apply manual interviewer face rect', error)
+    return undefined
+  }
+}
+
+async function captureWithMediaPipeFaceLandmarker<T extends string | PortraitManualCropRequired>(
+  capture: (landmarker: FaceLandmarker | undefined) => Promise<CaptureResult<T>>
+): Promise<T | undefined> {
   const landmarker = await createMediaPipeFaceLandmarker().catch((error: unknown) => {
     console.warn('Failed to initialize MediaPipe face landmarker', error)
     return undefined

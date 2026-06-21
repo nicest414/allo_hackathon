@@ -4,6 +4,7 @@ import {
   calculateBaseDominance,
   calculateDominance
 } from '../domain/scoring/dominanceCalculator'
+import type { NormalizedRect } from '../capture/portraitFrame'
 
 export interface DominanceScores {
   candidateFace: number
@@ -32,6 +33,11 @@ interface DominanceState {
   dominance: number
   scores: DominanceScores
   portraitImageUrls: PortraitImageUrls
+  /**
+   * 面接官の顔の自動検出に失敗したときユーザーが手動指定した範囲。面接をまたいで保持し
+   * (resetでも消さない)、次回以降は自動検出が失敗してもダイアログを出さず自動適用する。
+   */
+  interviewerManualFaceRect?: NormalizedRect
   mockMode: boolean
   activeCutin: 'dominance' | 'deficit' | null
   logs: LogEntry[]
@@ -42,6 +48,7 @@ interface DominanceState {
   setScores: (scores: Partial<DominanceScores>, force?: boolean) => void
   setCandidatePortraitImageUrl: (url: string) => void
   setInterviewerPortraitImageUrl: (url: string) => void
+  setInterviewerManualFaceRect: (rect: NormalizedRect | undefined) => void
   triggerCutin: (type: 'dominance' | 'deficit') => void
   clearCutin: () => void
   reset: () => void
@@ -158,6 +165,7 @@ export const useDominanceStore = create<DominanceInternalState>((set) => ({
         interviewer: url
       }
     })),
+  setInterviewerManualFaceRect: (rect) => set({ interviewerManualFaceRect: rect }),
   triggerCutin: (type) => {
     set({ activeCutin: type })
     const store = useDominanceStore.getState()
