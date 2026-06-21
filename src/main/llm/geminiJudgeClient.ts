@@ -14,7 +14,8 @@ const REQUEST_TIMEOUT_MS = 10_000
 
 const SYSTEM_PROMPT = [
   'あなたは就活面接の評価者です。',
-  '面接官の質問に対する就活生の返答内容を評価し、0〜100の整数スコアと簡潔な理由を返してください。',
+  '面接官の直近の質問に対する就活生の直近の返答内容を評価し、0〜100の整数スコアと簡潔な理由を返してください。',
+  '「これまでの質疑」が渡された場合は文脈把握のための参考情報であり、それ自体は採点対象にしないでください。',
   '結論の明確さ・具体性・質問との適合度を重視し、内容が薄い/質問とずれている場合は低くしてください。'
 ].join('\n')
 
@@ -102,11 +103,20 @@ export function parseJudgmentResult(rawText: string): LlmJudgeResponseResult {
 }
 
 export function buildJudgePrompt(request: LlmJudgeResponseRequest): string {
-  return [
-    `# 質問\n${request.question}`,
-    `# 就活生の返答\n${request.answer}`,
-    '# 指示\n上記の返答を評価し、スコアと理由を出力してください。'
-  ].join('\n\n')
+  const sections: string[] = []
+
+  if (request.history && request.history.length > 0) {
+    const historyText = request.history
+      .map((turn, index) => `Q${index + 1}: ${turn.question}\nA${index + 1}: ${turn.answer}`)
+      .join('\n\n')
+    sections.push(`# これまでの質疑（参考。評価対象は最新の質問と返答のみ）\n${historyText}`)
+  }
+
+  sections.push(`# 質問\n${request.question}`)
+  sections.push(`# 就活生の返答\n${request.answer}`)
+  sections.push('# 指示\n上記の最新の質問と返答を評価し、スコアと理由を出力してください。')
+
+  return sections.join('\n\n')
 }
 
 function clampScore(value: unknown): number {

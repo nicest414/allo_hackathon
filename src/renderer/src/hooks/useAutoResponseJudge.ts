@@ -4,6 +4,10 @@ import { calculateResponseScore } from '../domain/scoring/responseScore'
 import { dominanceOrchestrator } from '../services/dominanceOrchestrator'
 import { createResponseJudger } from '../services/responseJudger'
 import {
+  createResponseHistoryTracker,
+  type ResponseHistoryTracker
+} from '../services/responseHistoryTracker'
+import {
   createResponseTurnTracker,
   type ResponseTurnTracker
 } from '../services/responseTurnTracker'
@@ -39,14 +43,33 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
 
+  // 同一ターン内のLLM呼び出し回数（クォータ消費の追跡用）。reportQuestionで新ターンになるとリセット。
+  const turnCallCountRef = useRef(0)
+  // 直近の連続エラー回数。429等の失敗が中立(50)としてEMAに混入していることが分かるようにする。
+  const consecutiveErrorCountRef = useRef(0)
+  // 直近の質問×回答ペアを保持し、文脈依存の質問（指示語・前の回答への言及等）の判定精度を上げる。
+  const historyTrackerRef = useRef<ResponseHistoryTracker | undefined>(undefined)
+  if (!historyTrackerRef.current) {
+    historyTrackerRef.current = createResponseHistoryTracker()
+  }
+
   const runJudge = useCallback(
     async (request: LlmJudgeResponseRequest): Promise<void> => {
-      console.log(`[auto-judge] 判定中… question="${request.question}" answer="${request.answer}"`)
+      turnCallCountRef.current += 1
+      historyTrackerRef.current?.recordTurn({ question: request.question, answer: request.answer })
+      const history = historyTrackerRef.current?.getHistory() ?? []
+      const requestWithHistory: LlmJudgeResponseRequest = {
+        ...request,
+        history: history.length > 0 ? history : undefined
+      }
+      console.log(
+        `[auto-judge] 判定中…(このターン${turnCallCountRef.current}回目, 履歴${history.length}件) question="${request.question}" answer="${request.answer}"`
+      )
       setJudging(true)
       try {
-        const outcome = await judger.judge(request)
+        const outcome = await judger.judge(requestWithHistory)
         if (outcome.status === 'skipped') {
-          console.log('[auto-judge] スキップ')
+          console.log(`[auto-judge] status=skipped(${outcome.reason})`)
           return
         }
 
@@ -59,7 +82,16 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
         dominanceOrchestrator.reportResponse(responseScore)
         setScore(responseScore)
         setReason(outcome.result.reason)
-        console.log(`[auto-judge] response=${responseScore} reason=${outcome.result.reason}`)
+
+        if (outcome.status === 'error') {
+          consecutiveErrorCountRef.current += 1
+          console.log(
+            `[auto-judge] status=error(連続${consecutiveErrorCountRef.current}回目) response=${responseScore}(中立値としてEMAに混入) reason=${outcome.result.reason}`
+          )
+        } else {
+          consecutiveErrorCountRef.current = 0
+          console.log(`[auto-judge] status=ok response=${responseScore} reason=${outcome.result.reason}`)
+        }
       } finally {
         setJudging(false)
       }
@@ -95,7 +127,9 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
     if (!enabledRef.current) {
       return
     }
+    historyTrackerRef.current?.onQuestionChange(text)
     setQuestion(text)
+    turnCallCountRef.current = 0
     trackerRef.current?.setQuestion(text)
   }, [])
 
@@ -109,10 +143,13 @@ export function useAutoResponseJudge(enabled: boolean): AutoResponseJudgeView {
 
   const reset = useCallback((): void => {
     trackerRef.current?.reset()
+    historyTrackerRef.current?.reset()
     setQuestion('')
     setAnswer('')
     setScore(null)
     setReason(null)
+    turnCallCountRef.current = 0
+    consecutiveErrorCountRef.current = 0
   }, [])
 
   return { judging, score, reason, question, answer, reportQuestion, reportAnswer, reset }
