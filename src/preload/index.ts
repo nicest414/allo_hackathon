@@ -3,6 +3,7 @@ import type {
   AlloPreloadApi,
   CaptureDesktopSourcesResult,
   LlmJudgeResponseResult,
+  OverlayCursorPosition,
   ScreenAccessStatus,
   SttTranscriptEvent
 } from '../shared/types/ipc'
@@ -66,6 +67,11 @@ const api: AlloPreloadApi = {
   overlay: {
     setClickThrough: async (request) => {
       await ipcRenderer.invoke(IPC_CHANNELS.overlaySetClickThrough, request)
+    },
+    getCursorPosition: async () => {
+      return ipcRenderer.invoke(
+        IPC_CHANNELS.overlayGetCursorPosition
+      ) as Promise<OverlayCursorPosition | null>
     }
   }
 }

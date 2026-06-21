@@ -12,7 +12,8 @@ export const IPC_CHANNELS = {
   captureOpenScreenSettings: 'capture:open-screen-settings',
   captureEnableLoopbackAudio: 'enable-loopback-audio',
   captureDisableLoopbackAudio: 'disable-loopback-audio',
-  overlaySetClickThrough: 'overlay:set-click-through'
+  overlaySetClickThrough: 'overlay:set-click-through',
+  overlayGetCursorPosition: 'overlay:get-cursor-position'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -55,6 +56,11 @@ export interface OverlaySetClickThroughRequest {
   enabled: boolean
 }
 
+export interface OverlayCursorPosition {
+  x: number
+  y: number
+}
+
 export interface AlloPreloadApi {
   stt: {
     start: (request: SttStartRequest) => Promise<void>
@@ -78,5 +84,6 @@ export interface AlloPreloadApi {
   }
   overlay: {
     setClickThrough: (request: OverlaySetClickThroughRequest) => Promise<void>
+    getCursorPosition: () => Promise<OverlayCursorPosition | null>
   }
 }

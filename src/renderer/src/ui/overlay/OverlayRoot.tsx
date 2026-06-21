@@ -90,6 +90,7 @@ export function OverlayRoot(): ReactElement {
   }, [])
 
   useEffect(() => {
+    let isDisposed = false
     const applyCursorMask = (cursorPosition: CursorPosition | null): void => {
       const element = overlayRootRef.current
       if (!element) {
@@ -100,20 +101,26 @@ export function OverlayRoot(): ReactElement {
       element.style.maskImage = maskStyle.maskImage?.toString() ?? ''
       element.style.webkitMaskImage = maskStyle.WebkitMaskImage?.toString() ?? ''
     }
-    const updateCursorPosition = (event: MouseEvent): void => {
-      applyCursorMask({ x: event.clientX, y: event.clientY })
-    }
-    const clearCursorPosition = (event: MouseEvent): void => {
-      if (event.relatedTarget === null) {
-        applyCursorMask(null)
+
+    const updateCursorPosition = async (): Promise<void> => {
+      const cursorPosition = await window.allo.overlay.getCursorPosition()
+      if (!isDisposed) {
+        applyCursorMask(cursorPosition)
       }
     }
 
-    window.addEventListener('mousemove', updateCursorPosition)
-    window.addEventListener('mouseout', clearCursorPosition)
+    const intervalId = window.setInterval(() => {
+      void updateCursorPosition()
+    }, 33)
+    void updateCursorPosition()
+
     return () => {
-      window.removeEventListener('mousemove', updateCursorPosition)
-      window.removeEventListener('mouseout', clearCursorPosition)
+      isDisposed = true
+      window.clearInterval(intervalId)
+      const element = overlayRootRef.current
+      if (element) {
+        applyCursorMask(null)
+      }
     }
   }, [])
   // STT→LLM自動判定。トークン浪費を防ぐため初期OFF。ONの間だけ沈黙検知で自動発火する。
